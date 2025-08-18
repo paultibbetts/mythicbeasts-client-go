@@ -19,6 +19,7 @@ func newTestClient(t *testing.T, mux *http.ServeMux) (*Client, *httptest.Server)
 // DiskSizes
 
 func TestGetVPSDiskSizes_OK(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/disk-sizes", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -42,6 +43,7 @@ func TestGetVPSDiskSizes_OK(t *testing.T) {
 }
 
 func TestGetVPSDiskSizes_BadJSON(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/disk-sizes", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"not-json}`))
@@ -58,6 +60,7 @@ func TestGetVPSDiskSizes_BadJSON(t *testing.T) {
 // Images
 
 func TestGetVPSImages_OK(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/images", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -86,6 +89,7 @@ func TestGetVPSImages_OK(t *testing.T) {
 }
 
 func TestGetVPSImages_BadJSON(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/images", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"not-json}`))
@@ -102,6 +106,7 @@ func TestGetVPSImages_BadJSON(t *testing.T) {
 // Zones
 
 func TestGetVPSZones_OK(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/zones", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -130,6 +135,7 @@ func TestGetVPSZones_OK(t *testing.T) {
 }
 
 func TestGetVPSZones_BadJSON(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/zones", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"not-json}`))
@@ -146,6 +152,7 @@ func TestGetVPSZones_BadJSON(t *testing.T) {
 // Hosts
 
 func TestGetVPSHosts_OK(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/hosts", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -175,6 +182,7 @@ func TestGetVPSHosts_OK(t *testing.T) {
 }
 
 func TestGetVPSHosts_BadJSON(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/hosts", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"not-json}`))
@@ -191,6 +199,7 @@ func TestGetVPSHosts_BadJSON(t *testing.T) {
 // Pricing
 
 func TestGetVPSPricing_OK(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/pricing", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -232,6 +241,7 @@ func TestGetVPSPricing_OK(t *testing.T) {
 }
 
 func TestGetVPSPricing_BadJSON(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/hosts", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"not-json}`))
@@ -248,6 +258,7 @@ func TestGetVPSPricing_BadJSON(t *testing.T) {
 // VPS
 
 func TestGetVPS_ByID(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/servers/my-id", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
@@ -272,6 +283,7 @@ func TestGetVPS_ByID(t *testing.T) {
 }
 
 func TestGetVPS_EmptyIdentifier(t *testing.T) {
+	t.Parallel()
 	c, _ := NewClient(nil, nil)
 	_, err := c.GetVPS("")
 	if err == nil {

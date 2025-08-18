@@ -10,6 +10,7 @@ import (
 )
 
 func TestNewRequest_ResolvesRelativeAgainstHost(t *testing.T) {
+	t.Parallel()
 	c, _ := NewClient(nil, nil)
 	c.HostURL = "https://example.com/base"
 
@@ -23,6 +24,7 @@ func TestNewRequest_ResolvesRelativeAgainstHost(t *testing.T) {
 }
 
 func TestNewRequest_KeepsAbsoluteURL(t *testing.T) {
+	t.Parallel()
 	c, _ := NewClient(nil, nil)
 
 	req, err := c.NewRequest(http.MethodGet, "https://api.example.com/x", nil)
@@ -36,6 +38,7 @@ func TestNewRequest_KeepsAbsoluteURL(t *testing.T) {
 }
 
 func TestNewRequest_InvalidHostURL(t *testing.T) {
+	t.Parallel()
 	c, _ := NewClient(nil, nil)
 	c.HostURL = ":// bad base"
 	_, err := c.NewRequest(http.MethodGet, "/anything", nil)
@@ -45,6 +48,7 @@ func TestNewRequest_InvalidHostURL(t *testing.T) {
 }
 
 func TestDo_AddsBearerToken(t *testing.T) {
+	t.Parallel()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer tok" {
 			t.Fatalf("Authorization = %q, want %q", got, "Bearer tok")
@@ -68,6 +72,7 @@ func TestDo_AddsBearerToken(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
+	t.Parallel()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Fatalf("method = %s, want GET", r.Method)
@@ -89,6 +94,7 @@ func TestGet(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
+	t.Parallel()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			t.Fatalf("method = %s, want DELETE", r.Method)
@@ -105,6 +111,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestBody_ReadsAllAndCloses(t *testing.T) {
+	t.Parallel()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("hello"))
 
@@ -148,6 +155,7 @@ func scriptHandler(steps []step) http.HandlerFunc {
 }
 
 func TestPoll_SeeOtherReturnsLocation(t *testing.T) {
+	t.Parallel()
 	want := "https://done.example.com/vps/123"
 	s := httptest.NewServer(scriptHandler([]step{
 		{status: http.StatusSeeOther, headers: map[string]string{"Location": want}},
@@ -169,6 +177,7 @@ func TestPoll_SeeOtherReturnsLocation(t *testing.T) {
 }
 
 func TestPoll_InternalServerError(t *testing.T) {
+	t.Parallel()
 	s := httptest.NewServer(scriptHandler([]step{
 		{status: http.StatusInternalServerError, body: "boom"},
 	}))
@@ -186,6 +195,7 @@ func TestPoll_InternalServerError(t *testing.T) {
 }
 
 func TestPoll_AcceptedWithLocation(t *testing.T) {
+	t.Parallel()
 	s := httptest.NewServer(scriptHandler([]step{
 		{status: http.StatusAccepted, headers: map[string]string{"Location": "/ready/123"}},
 	}))
@@ -206,6 +216,7 @@ func TestPoll_AcceptedWithLocation(t *testing.T) {
 }
 
 func TestPoll_OKWithCompletionChecker(t *testing.T) {
+	t.Parallel()
 	want := "https://srv/ok"
 	payload := map[string]any{"state": "done", "url": want}
 	b, _ := json.Marshal(payload)
@@ -235,6 +246,7 @@ func TestPoll_OKWithCompletionChecker(t *testing.T) {
 }
 
 func TestPoll_Timeout(t *testing.T) {
+	t.Parallel()
 	s := httptest.NewServer(scriptHandler([]step{
 		{status: http.StatusOK, body: `{"state":"pending"}`},
 	}))
@@ -252,6 +264,7 @@ func TestPoll_Timeout(t *testing.T) {
 }
 
 func TestPoll_OKBadJSON(t *testing.T) {
+	t.Parallel()
 	s := httptest.NewServer(scriptHandler([]step{
 		{status: http.StatusOK, body: "{not-json"},
 	}))
@@ -269,6 +282,7 @@ func TestPoll_OKBadJSON(t *testing.T) {
 }
 
 func TestPoll_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
 	s := httptest.NewServer(scriptHandler([]step{
 		{status: http.StatusTeapot},
 	}))

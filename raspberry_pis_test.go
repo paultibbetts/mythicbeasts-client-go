@@ -9,6 +9,7 @@ import (
 )
 
 func TestRaspberryPis_GetModels_OK(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/models", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -44,6 +45,7 @@ func TestRaspberryPis_GetModels_OK(t *testing.T) {
 }
 
 func TestRaspberryPis_GetModels_BadJSON(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/models", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -58,6 +60,7 @@ func TestRaspberryPis_GetModels_BadJSON(t *testing.T) {
 }
 
 func TestRaspberryPis_GetModels_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/models", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -73,6 +76,7 @@ func TestRaspberryPis_GetModels_UnexpectedStatus(t *testing.T) {
 }
 
 func TestRaspberryPis_GetOperatingSystems_OK(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/images/3", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -106,6 +110,7 @@ func TestRaspberryPis_GetOperatingSystems_OK(t *testing.T) {
 }
 
 func TestRaspberryPis_GetOperatingSystems_BadJSON(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/images/3", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -120,6 +125,7 @@ func TestRaspberryPis_GetOperatingSystems_BadJSON(t *testing.T) {
 }
 
 func TestRaspberryPis_GetOperatingSystems_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/images/3", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -135,6 +141,7 @@ func TestRaspberryPis_GetOperatingSystems_UnexpectedStatus(t *testing.T) {
 }
 
 func TestRaspberryPis_GetPis(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -170,6 +177,7 @@ func TestRaspberryPis_GetPis(t *testing.T) {
 }
 
 func TestRaspberryPis_GetPis_BadJSON(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -184,6 +192,7 @@ func TestRaspberryPis_GetPis_BadJSON(t *testing.T) {
 }
 
 func TestRaspberryPis_GetPis_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -199,6 +208,7 @@ func TestRaspberryPis_GetPis_UnexpectedStatus(t *testing.T) {
 }
 
 func TestRaspberryPis_GetPi(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/1", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -225,6 +235,7 @@ func TestRaspberryPis_GetPi(t *testing.T) {
 }
 
 func TestRaspberryPis_GetPi_BadJSON(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/1", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -239,6 +250,7 @@ func TestRaspberryPis_GetPi_BadJSON(t *testing.T) {
 }
 
 func TestRaspberryPis_GetPi_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/1", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -254,6 +266,7 @@ func TestRaspberryPis_GetPi_UnexpectedStatus(t *testing.T) {
 }
 
 func TestRaspberryPis_Create_Success(t *testing.T) {
+	t.Parallel()
 	const id = "test-pi"
 	const pollPath = "/poll/test"
 
@@ -293,6 +306,7 @@ func TestRaspberryPis_Create_Success(t *testing.T) {
 }
 
 func TestRaspberryPis_Create_Conflict(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/existing", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -315,6 +329,7 @@ func TestRaspberryPis_Create_Conflict(t *testing.T) {
 }
 
 func TestRaspberryPis_Create_MissingLocation(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/x", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
@@ -331,6 +346,7 @@ func TestRaspberryPis_Create_MissingLocation(t *testing.T) {
 }
 
 func TestRaspberryPis_Create_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/y", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -347,6 +363,7 @@ func TestRaspberryPis_Create_UnexpectedStatus(t *testing.T) {
 }
 
 func TestRaspberryPis_Delete_EmptyIdentifier(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
@@ -357,6 +374,7 @@ func TestRaspberryPis_Delete_EmptyIdentifier(t *testing.T) {
 }
 
 func TestRaspberryPis_Delete_204(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/test", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
@@ -374,6 +392,7 @@ func TestRaspberryPis_Delete_204(t *testing.T) {
 }
 
 func TestRaspberryPis_Delete_404(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/missing", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -388,6 +407,7 @@ func TestRaspberryPis_Delete_404(t *testing.T) {
 }
 
 func TestRaspberryPis_Delete_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/bad", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -404,6 +424,7 @@ func TestRaspberryPis_Delete_UnexpectedStatus(t *testing.T) {
 }
 
 func TestRaspBerryPis_Delete_NetworkError(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	c, srv := newTestClient(t, mux)
 	srv.Close()

@@ -8,6 +8,7 @@ import (
 )
 
 func TestUserData_Create(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/user-data", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -59,6 +60,7 @@ func TestUserData_Create(t *testing.T) {
 }
 
 func TestUserData_Create_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/user-data", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -80,6 +82,7 @@ func TestUserData_Create_UnexpectedStatus(t *testing.T) {
 }
 
 func TestUserData_Create_BadJSON(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/user-data", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
@@ -96,6 +99,7 @@ func TestUserData_Create_BadJSON(t *testing.T) {
 }
 
 func TestUserData_Get(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/user-data/1", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

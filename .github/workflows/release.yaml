@@ -41,4 +41,4 @@ jobs:
             ]
         extra_plugins: |
           @semantic-release/changelog@6.0.0
-          @semantic-release/git@6.0.0
+          @semantic-release/git@10.0.1

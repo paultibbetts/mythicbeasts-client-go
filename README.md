@@ -12,7 +12,7 @@ mythicbeasts-client-go is a typed Go client for the Mythic Beasts [Raspberry Pi]
 go get github.com/paultibbetts/mythicbeasts-client-go@latest
 ```
 
-## Usage
+## Usage
 
 ### Quick start
 

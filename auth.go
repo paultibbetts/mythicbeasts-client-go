@@ -18,7 +18,8 @@ func (c *Client) SignIn() (*AuthResponse, error) {
 		return nil, fmt.Errorf("define keyid and secret")
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/login", c.AuthURL), strings.NewReader("grant_type=client_credentials"))
+	url := fmt.Sprintf("%s/login", c.AuthURL)
+	req, err := http.NewRequest("POST", url, strings.NewReader("grant_type=client_credentials"))
 	if err != nil {
 		return nil, err
 	}

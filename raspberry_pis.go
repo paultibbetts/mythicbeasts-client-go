@@ -53,6 +53,9 @@ func (c *Client) GetPiOperatingSystems(model int64) (map[string]string, error) {
 	url := fmt.Sprintf("/pi/images/%d", model)
 
 	res, err := c.get(url)
+	if err != nil {
+		return nil, err
+	}
 
 	body, err := c.body(res)
 	if err != nil {
@@ -118,6 +121,9 @@ func (c *Client) GetPi(identifier string) (Pi, error) {
 	url := fmt.Sprintf("/pi/servers/%s", identifier)
 
 	res, err := c.get(url)
+	if err != nil {
+		return Pi{}, err
+	}
 
 	body, err := c.body(res)
 	if err != nil {

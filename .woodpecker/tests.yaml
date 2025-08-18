@@ -1,7 +1,0 @@
-when:
-  - event: [push, tag]
-steps:
-  - name: test
-    image: golang:1.24
-    commands: 
-    - go test ./...

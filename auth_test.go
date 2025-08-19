@@ -62,9 +62,9 @@ func TestSignIn_Success(t *testing.T) {
 	c.Auth = AuthStruct{KeyID: key, Secret: secret}
 	c.Token = ""
 
-	ar, err := c.SignIn()
+	ar, err := c.signIn()
 	if err != nil {
-		t.Fatalf("SignIn error: %v", err)
+		t.Fatalf("signIn error: %v", err)
 	}
 	if ar.AccessToken != "XYZ" || strings.ToLower(ar.TokenType) != "bearer" {
 		t.Fatalf("expected missing creds error, got: %v", err)
@@ -75,7 +75,7 @@ func TestSignIn_MissingCreds(t *testing.T) {
 	t.Parallel()
 	c, _ := NewClient(nil, nil)
 	c.AuthURL = "http://example.com"
-	_, err := c.SignIn()
+	_, err := c.signIn()
 	if err == nil || !strings.Contains(err.Error(), "define keyid and secret") {
 		t.Fatalf("expected missing creds error, got %v", err)
 	}
@@ -94,7 +94,7 @@ func TestSignIn_ServerBadJSONOrStatus(t *testing.T) {
 	c.AuthURL = srv.URL
 	c.Auth = AuthStruct{KeyID: "id", Secret: "sec"}
 
-	_, err := c.SignIn()
+	_, err := c.signIn()
 	if err == nil {
 		t.Fatalf("expected error for non-200 response")
 	}

@@ -7,11 +7,14 @@ import (
 	"net/http"
 )
 
+// NewUserData represents the data required to create
+// a new User Data snippet.
 type NewUserData struct {
 	Name string `json:"name"`
 	Data string `json:"data"`
 }
 
+// UserData represents a User Data snippet.
 type UserData struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
@@ -19,6 +22,7 @@ type UserData struct {
 	Size int64  `json:"size"`
 }
 
+// CreateUserData creates a new User Data snippet with the given ID.
 func (c *Client) CreateUserData(data NewUserData) (*UserData, error) {
 	requestURL := fmt.Sprintf("vps/user-data")
 
@@ -57,6 +61,7 @@ func (c *Client) CreateUserData(data NewUserData) (*UserData, error) {
 	return &created, nil
 }
 
+// GetUserData retrieves the User Data snippet with the given ID.
 func (c *Client) GetUserData(id int64) (*UserData, error) {
 	requestUrl := fmt.Sprintf("/vps/user-data/%d", id)
 
@@ -79,18 +84,9 @@ func (c *Client) GetUserData(id int64) (*UserData, error) {
 	return &result, nil
 }
 
+// DeleteUserData removes the User Data snippet with the given ID.
 func (c *Client) DeleteUserData(id int64) error {
-	url := fmt.Sprintf("vps/user-data/%d", id)
+	url := fmt.Sprintf("/vps/user-data/%d", id)
 
-	req, err := c.NewRequest(http.MethodDelete, url, nil)
-	if err != nil {
-		return err
-	}
-
-	_, deleteErr := c.do(req)
-	if deleteErr != nil {
-		return deleteErr
-	}
-
-	return nil
+	return c.delete(url)
 }

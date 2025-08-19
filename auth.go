@@ -8,12 +8,15 @@ import (
 	"strings"
 )
 
+// basicAuth encodes basic auth for use in the auth header.
 func basicAuth(username, password string) string {
 	auth := username + ":" + password
 	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
-func (c *Client) SignIn() (*AuthResponse, error) {
+// signIn signs in to the auth service and returns the token
+// used for future requests.
+func (c *Client) signIn() (*AuthResponse, error) {
 	if c.Auth.KeyID == "" || c.Auth.Secret == "" {
 		return nil, fmt.Errorf("define keyid and secret")
 	}

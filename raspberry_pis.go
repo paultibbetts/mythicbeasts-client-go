@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+// PiModel represents the specifications of a Pi model
+// that can be provisioned by Mythic Beasts.
 type PiModel struct {
 	Model    int64 `json:"model"`
 	Memory   int64 `json:"memory"`
@@ -16,6 +18,8 @@ type PiModel struct {
 	CPUSpeed int64 `json:"cpu_speed"`
 }
 
+// GetPiModels retrieves the list of available Pi models
+// that can be provisoned by Mythic Beasts.
 func (c *Client) GetPiModels() ([]PiModel, error) {
 	res, err := c.get("/pi/models")
 	if err != nil {
@@ -42,14 +46,12 @@ func (c *Client) GetPiModels() ([]PiModel, error) {
 	return result.Models, nil
 }
 
-type PiOperatingSystem struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
+// PiOperatingSystems maps OS identifiers to their display names.
 type PiOperatingSystems map[string]string
 
-func (c *Client) GetPiOperatingSystems(model int64) (map[string]string, error) {
+// GetPiOperatingSystems retrieves the list of available operating
+// system images available for the specified Pi model.
+func (c *Client) GetPiOperatingSystems(model int64) (PiOperatingSystems, error) {
 	url := fmt.Sprintf("/pi/images/%d", model)
 
 	res, err := c.get(url)
@@ -72,6 +74,7 @@ func (c *Client) GetPiOperatingSystems(model int64) (map[string]string, error) {
 	return result, nil
 }
 
+// Pi represents a provisoned Pi server and its attributes.
 type Pi struct {
 	IP              string `json:"ip"`
 	SSHPort         int64  `json:"ssh_port"`
@@ -84,12 +87,14 @@ type Pi struct {
 	NICSpeed        int64  `json:"nic_speed"`
 }
 
+// PiServers represents the list of provisoned Pi servers.
 type PiServers struct {
 	Servers []Pi `json:"servers"`
 }
 
-// TODO get rid of this?
-// when will I use this?
+// GetPis returns the list of provisioned Pi servers.
+// It does **not** return the identifiers, so it is only
+// useful for listing all servers.
 func (c *Client) GetPis() ([]Pi, error) {
 	res, err := c.get("/pi/servers")
 	if err != nil {
@@ -114,6 +119,8 @@ func (c *Client) GetPis() ([]Pi, error) {
 	return result.Servers, nil
 }
 
+// GetPi retrieves details for a single Pi server by its identifier.
+// Returns ErrEmptyIdentifier if the identifier is blank.
 func (c *Client) GetPi(identifier string) (Pi, error) {
 	if strings.TrimSpace(identifier) == "" {
 		return Pi{}, ErrEmptyIdentifier
@@ -139,6 +146,8 @@ func (c *Client) GetPi(identifier string) (Pi, error) {
 	return result, nil
 }
 
+// CreatePiRequest represents the parameters for provisioning
+// a new Pi server.
 type CreatePiRequest struct {
 	Model      int64  `json:"model,omitempty"`
 	Memory     int64  `json:"memory,omitempty"`
@@ -149,6 +158,9 @@ type CreatePiRequest struct {
 	WaitForDNS bool   `json:"wait_for_dns,omitempty"`
 }
 
+// CreatePi provisions a new Pi server with the given identifier and
+// request parameters. It blocks until the server becomes live or the timeout
+// is reached. Returns ErrIdentifierConflict if the identifier is already in use.
 func (c *Client) CreatePi(identifier string, server CreatePiRequest) (*Pi, error) {
 	requestUrl := fmt.Sprintf("/pi/servers/%s", identifier)
 
@@ -222,6 +234,9 @@ func (c *Client) CreatePi(identifier string, server CreatePiRequest) (*Pi, error
 	return &created, nil
 }
 
+// DeletePi removes the Pi server with the given identifier.
+// Returns ErrEmptyIdentifier if the identifier is blank.
+// Considers a 404 as a successful deletion.
 func (c *Client) DeletePi(identifier string) error {
 	if strings.TrimSpace(identifier) == "" {
 		return ErrEmptyIdentifier

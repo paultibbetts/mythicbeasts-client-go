@@ -13,11 +13,13 @@ import (
 	"time"
 )
 
+// DiskSizes represents the available disk sizes for a VPS.
 type DiskSizes struct {
 	HDD []int64 `json:"hdd"`
 	SSD []int64 `json:"ssd"`
 }
 
+// GetVPSDiskSizes retrieves the list of available disk sizes.
 func (c *Client) GetVPSDiskSizes() (*DiskSizes, error) {
 	res, err := c.get("/vps/disk-sizes")
 	if err != nil {
@@ -38,13 +40,17 @@ func (c *Client) GetVPSDiskSizes() (*DiskSizes, error) {
 	return &result, nil
 }
 
+// VPSImage represents a VPS operating system image.
 type VPSImage struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
+// VPSImages repreesnts a list of VPSImages.
 type VPSImages map[string]VPSImage
 
+// GetVPSImages retrieves the list of available operating
+// system images available for a VPS.
 func (c *Client) GetVPSImages() (VPSImages, error) {
 	res, err := c.get("/vps/images")
 	if err != nil {
@@ -65,14 +71,20 @@ func (c *Client) GetVPSImages() (VPSImages, error) {
 	return result, nil
 }
 
+// Zones represents a list of available Zones a VPS may be
+// provisioned in.
 type Zones map[string]Zone
 
+// Zone represents a zone (datacentre) a VPS may be
+// provisioned in. It can include its parent zones.
 type Zone struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Parents     []string `json:"parents"`
 }
 
+// GetVPSZones retrieves the list of available zones
+// a VPS may be provisioned in.
 func (c *Client) GetVPSZones() (Zones, error) {
 	res, err := c.get("/vps/zones")
 	if err != nil {
@@ -94,8 +106,10 @@ func (c *Client) GetVPSZones() (Zones, error) {
 	return result, nil
 }
 
+// VPSHosts represents a list of VPSHostInfo
 type VPSHosts map[string]VPSHostInfo
 
+// VPSHostInfo represents an available private cloud host.
 type VPSHostInfo struct {
 	Name     string          `json:"name"`
 	Cores    int64           `json:"cores"`
@@ -105,11 +119,15 @@ type VPSHostInfo struct {
 	FreeDisk VPSHostDiskInfo `json:"free_disk"`
 }
 
+// VPSHostDiskInfo represents the disk information of a
+// VPSHost.
 type VPSHostDiskInfo struct {
 	SSD int64 `json:"ssd"`
 	HDD int64 `json:"hdd"`
 }
 
+// GetVPSHosts retrieves the list of available private cloud
+// hosts.
 func (c *Client) GetVPSHosts() (VPSHosts, error) {
 	res, err := c.get("/vps/hosts")
 	if err != nil {
@@ -130,22 +148,31 @@ func (c *Client) GetVPSHosts() (VPSHosts, error) {
 	return result, nil
 }
 
+// VPSPricing represents the pricing information
+// used for on-demand VPS resources.
 type VPSPricing struct {
 	Disk     VPSDiskPrices    `json:"disk"`
 	IPv4     int64            `json:"ipv4"`
 	Products map[string]int64 `json:"products"`
 }
 
+// VPSDiskPrices represents the pricing information
+// for different disk types available for a VPS.
 type VPSDiskPrices struct {
 	SSD VPSDiskPricing `json:"ssd"`
 	HDD VPSDiskPricing `json:"hdd"`
 }
 
+// VPSDiskPricing represents the price of a type of
+// disk available to a VPS. The extent represents
+// the price per GB per unit of disk space.
 type VPSDiskPricing struct {
 	Price  int64 `json:"price"`
 	Extent int64 `json:"extent"`
 }
 
+// GetVPSPricing retreives the VPSPricing for
+// on-demand VPS products.
 func (c *Client) GetVPSPricing() (VPSPricing, error) {
 	res, err := c.get("/vps/pricing")
 	if err != nil {
@@ -166,11 +193,14 @@ func (c *Client) GetVPSPricing() (VPSPricing, error) {
 	return result, nil
 }
 
+// VPSZone repreents the Zone (datacentre) that a VPS
+// is provisioned in.
 type VPSZone struct {
 	Code string `json:"code"`
 	Name string `json:"name"`
 }
 
+// VPS represents a provisioned VPS.
 type VPS struct {
 	Identifier string   `json:"identifier"`
 	Name       string   `json:"name"`
@@ -195,6 +225,8 @@ type VPS struct {
 	VNC        VNC      `json:"vnc"`
 }
 
+// VPSSpecs represents the specifications of a
+// provisioned VPS.
 type VPSSpecs struct {
 	DiskType   string `json:"disk_type"`
 	DiskSize   int64  `json:"disk_size"`
@@ -204,11 +236,15 @@ type VPSSpecs struct {
 	RAM        int64  `json:"ram"`
 }
 
+// SSHProxy represents the details of the
+// SSH Proxy in use by the VPS.
 type SSHProxy struct {
 	Hostname string `json:"hostname"`
 	Port     int64  `json:"port"`
 }
 
+// VNC represents the details of VNC that should
+// be used when provisioning a new VPS.
 type VNC struct {
 	Mode     string `json:"mode"`
 	Password string `json:"password"`
@@ -218,8 +254,12 @@ type VNC struct {
 	Display  int64  `json:"display"`
 }
 
+// ErrEmptyIdentifier is returned when an identifier is not used.
+// Identifiers are required for all VPS resources.
 var ErrEmptyIdentifier = errors.New("identifier is required")
 
+// GetVPS retrieves the details for the VPS with the given identifier.
+// Returns ErrEmptyIdentifier if the identifier is blank.
 func (c *Client) GetVPS(identifier string) (VPS, error) {
 	if strings.TrimSpace(identifier) == "" {
 		return VPS{}, ErrEmptyIdentifier
@@ -244,6 +284,10 @@ func (c *Client) GetVPS(identifier string) (VPS, error) {
 	return result, nil
 }
 
+// VPSProduct represents an available VPS product.
+// Defaults to a Period of "on-demand" which
+// returns the products that can be provisioned using
+// the client.
 type VPSProduct struct {
 	ID          string          `json:"id"`
 	Name        string          `json:"name"`
@@ -254,12 +298,15 @@ type VPSProduct struct {
 	Specs       VPSProductSpecs `json:"specs"`
 }
 
+// VPSProductSpecs represents the specifications of a
+// VPSProduct.
 type VPSProductSpecs struct {
 	Cores     int `json:"cores"`
 	RAM       int `json:"ram"`
 	Bandwidth int `json:"bandwidth"`
 }
 
+// GetVPSProducts retrieves all VPSProducts available.
 func (c *Client) GetVPSProducts() ([]VPSProduct, error) {
 	res, err := c.get("/vps/products")
 	if err != nil {
@@ -297,6 +344,8 @@ func (c *Client) GetVPSProducts() ([]VPSProduct, error) {
 	return products, nil
 }
 
+// NewVPS represents the data required for provisioning a VPS.
+// Some fields are optional and some are only used on creation.
 type NewVPS struct {
 	Product        string `json:"product"`
 	Name           string `json:"name,omitempty"`
@@ -321,11 +370,16 @@ type NewVPS struct {
 	Tablet         bool   `json:"tablet"`
 }
 
+// NewVNC represents the data required to set VNC details when
+// provisioning a new VPS.
 type NewVNC struct {
 	Mode     string `json:"mode,omitempty"`
 	Password string `json:"password,omitempty"`
 }
 
+// CreateVPS provisions a new VPS with the given identifier and
+// request parameters. It blocks until the server becomes live or the timeout
+// is reached. Returns ErrIdentifierConflict if the identifier is already in use.
 func (c *Client) CreateVPS(identifier string, server NewVPS) (VPS, error) {
 	requestUrl := fmt.Sprintf("/vps/servers/%s", identifier)
 
@@ -398,18 +452,15 @@ func (c *Client) CreateVPS(identifier string, server NewVPS) (VPS, error) {
 	return created, nil
 }
 
+// DeleteVPS removes a provisioned VPS.
+// Returns ErrEmptyIdentifier if the identifier is blank.
+// Considers a 404 as a successful deletion.
 func (c *Client) DeleteVPS(identifier string) error {
+	if strings.TrimSpace(identifier) == "" {
+		return ErrEmptyIdentifier
+	}
+
 	url := fmt.Sprintf("/vps/servers/%s", identifier)
 
-	req, err := c.NewRequest(http.MethodDelete, url, nil)
-	if err != nil {
-		return err
-	}
-
-	_, deleteErr := c.do(req)
-	if deleteErr != nil {
-		return deleteErr
-	}
-
-	return nil
+	return c.delete(url)
 }

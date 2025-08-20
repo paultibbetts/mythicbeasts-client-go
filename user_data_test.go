@@ -105,6 +105,7 @@ func TestUserData_Get(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Fatalf("want GET")
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":1,"name":"test","content":"123abc", "size":123}`))
 	})
 	c, srv := newTestClient(t, mux)
@@ -116,5 +117,77 @@ func TestUserData_Get(t *testing.T) {
 	}
 	if data.ID != 1 || data.Name != "test" || !strings.Contains(data.Data, "123abc") || data.Size != 123 {
 		t.Fatalf("user data = %+v", data)
+	}
+}
+
+func TestUserData_GetIdFromName(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vps/user-data", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatal("want GET")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(UserDataIndex{
+			UserData: map[string]UserData{
+				"12": {
+					ID:   12,
+					Name: "test1",
+					Size: 129,
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/vps/user-data/12", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("want GET")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(UserData{
+			ID:   12,
+			Name: "test1",
+			Data: "terraform",
+			Size: 129,
+		})
+	})
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	data, err := c.GetUserDataByName("test1")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if data.ID != 12 {
+		t.Fatalf("user data id wrong, got %+v", data)
+	}
+}
+
+func TestUserData_GetIdFromName_Fails(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vps/user-data", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatal("want GET")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(UserDataIndex{
+			UserData: map[string]UserData{
+				"12": {
+					ID:   12,
+					Name: "test1",
+					Size: 129,
+				},
+			},
+		})
+	})
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := c.GetUserDataByName("test2")
+	if err == nil {
+		t.Fatalf("expected ErrUserDataNotFound")
+	}
+	if _, ok := err.(*ErrUserDataNotFound); !ok {
+		t.Fatalf("want ErrUserDataNotFound, got %T: %v", err, err)
 	}
 }

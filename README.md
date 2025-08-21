@@ -21,28 +21,33 @@ package main
 
 import (
 	"fmt"
+	"log"
 
-	"github.com/paultibbetts/mythicbeasts-client-go"
+    "github.com/paultibbetts/mythicbeasts-client-go"
 )
 
 func main() {
-	c := mythicbeasts.NewClient("YOUR_API_KEYID", "YOUR_API_SECRET")
-
-	// Example: list VPS disk sizes
-	sizes, err := c.GetVPSDiskSizes()
+	c, err := mythicbeasts.NewClient("YOUR_API_KEYID", "YOUR_API_SECRET")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-    fmt.Println("Available HDD sizes:", sizes.HDD)
-    fmt.Println("Available SSD sizes:", sizes.SSD)
+	please := mythicbeasts.CreatePiRequest{
+		Model:      4,
+		Memory:     4098,
+		DiskSize:   10,
+		OSImage:    "rpi-bookworm-arm64",
+		SSHKey:     "ssh-ed25519 ... code@paultibbetts.uk",
+		WaitForDNS: true,
+	}
+
+	pi, err := c.CreatePi("example-pi", please)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Pi IPv6: %s", pi.IP)
 }
-```
-
-### Import
-
-```go
-import "github.com/paultibbetts/mythicbeasts-client-go"
 ```
 
 ### Authentication

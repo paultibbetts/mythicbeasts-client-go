@@ -49,7 +49,7 @@ type AuthResponse struct {
 // If Key ID and secret are provided it performs an auth flow.
 // If they are empty it will return an unauthenticated client.
 // The returned client does not follow redirects.
-func NewClient(keyid, secret *string) (*Client, error) {
+func NewClient(keyid, secret string) (*Client, error) {
 	hc := &http.Client{
 		Timeout: 30 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -63,13 +63,13 @@ func NewClient(keyid, secret *string) (*Client, error) {
 		PollInterval: 10 * time.Second,
 	}
 
-	if keyid == nil || secret == nil {
+	if keyid == "" || secret == "" {
 		return &c, nil
 	}
 
 	c.Auth = AuthStruct{
-		KeyID:  *keyid,
-		Secret: *secret,
+		KeyID:  keyid,
+		Secret: secret,
 	}
 
 	authResponse, err := c.signIn()

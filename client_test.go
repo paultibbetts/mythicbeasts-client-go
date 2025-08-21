@@ -11,7 +11,7 @@ import (
 
 func TestNewRequest_ResolvesRelativeAgainstHost(t *testing.T) {
 	t.Parallel()
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.HostURL = "https://example.com/base"
 
 	req, err := c.NewRequest(http.MethodGet, "/vps/disk-sizes", nil)
@@ -25,7 +25,7 @@ func TestNewRequest_ResolvesRelativeAgainstHost(t *testing.T) {
 
 func TestNewRequest_KeepsAbsoluteURL(t *testing.T) {
 	t.Parallel()
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 
 	req, err := c.NewRequest(http.MethodGet, "https://api.example.com/x", nil)
 	if err != nil {
@@ -39,7 +39,7 @@ func TestNewRequest_KeepsAbsoluteURL(t *testing.T) {
 
 func TestNewRequest_InvalidHostURL(t *testing.T) {
 	t.Parallel()
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.HostURL = ":// bad base"
 	_, err := c.NewRequest(http.MethodGet, "/anything", nil)
 	if err == nil {
@@ -57,7 +57,7 @@ func TestDo_AddsBearerToken(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.Token = "tok"
 	req, _ := c.NewRequest(http.MethodGet, s.URL, nil)
 
@@ -83,7 +83,7 @@ func TestGet(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	res, err := c.get(s.URL)
 	if err != nil {
 		t.Fatalf("get error: %v", err)
@@ -104,7 +104,7 @@ func TestDelete(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	if err := c.delete(s.URL); err != nil {
 		t.Fatalf("delete error: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestBody_ReadsAllAndCloses(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	res, err := c.get(s.URL)
 	if err != nil {
 		t.Fatalf("get error: %v", err)
@@ -162,7 +162,7 @@ func TestPoll_SeeOtherReturnsLocation(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
 	url, err := c.pollProvisioning(s.URL, 2*time.Second, "id", func(map[string]any, string) (string, bool) {
@@ -183,7 +183,7 @@ func TestPoll_InternalServerError(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
 	_, err := c.pollProvisioning(s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
@@ -201,7 +201,7 @@ func TestPoll_AcceptedWithLocation(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
 	url, err := c.pollProvisioning(s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
@@ -226,7 +226,7 @@ func TestPoll_OKWithCompletionChecker(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
 	checker := func(data map[string]any, id string) (string, bool) {
@@ -252,7 +252,7 @@ func TestPoll_Timeout(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.PollInterval = 5 * time.Millisecond
 
 	_, err := c.pollProvisioning(s.URL, 20*time.Millisecond, "id", func(map[string]any, string) (string, bool) {
@@ -270,7 +270,7 @@ func TestPoll_OKBadJSON(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
 	_, err := c.pollProvisioning(s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
@@ -288,7 +288,7 @@ func TestPoll_UnexpectedStatus(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
 	_, err := c.pollProvisioning(s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {

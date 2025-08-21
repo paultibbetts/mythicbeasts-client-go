@@ -57,7 +57,10 @@ func TestSignIn_Success(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, err := NewClient("", "")
+	if err != nil {
+		t.Fatalf("NewClient error: %v", err)
+	}
 	c.AuthURL = srv.URL
 	c.Auth = AuthStruct{KeyID: key, Secret: secret}
 	c.Token = ""
@@ -67,13 +70,13 @@ func TestSignIn_Success(t *testing.T) {
 		t.Fatalf("signIn error: %v", err)
 	}
 	if ar.AccessToken != "XYZ" || strings.ToLower(ar.TokenType) != "bearer" {
-		t.Fatalf("expected missing creds error, got: %v", err)
+		t.Fatalf("got token=%q type=%q; want token=XYZ type=bearer", ar.AccessToken, ar.TokenType)
 	}
 }
 
 func TestSignIn_MissingCreds(t *testing.T) {
 	t.Parallel()
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.AuthURL = "http://example.com"
 	_, err := c.signIn()
 	if err == nil || !strings.Contains(err.Error(), "define keyid and secret") {
@@ -90,7 +93,7 @@ func TestSignIn_ServerBadJSONOrStatus(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.AuthURL = srv.URL
 	c.Auth = AuthStruct{KeyID: "id", Secret: "sec"}
 

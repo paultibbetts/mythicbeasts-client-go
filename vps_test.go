@@ -11,7 +11,7 @@ import (
 func newTestClient(t *testing.T, mux *http.ServeMux) (*Client, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewServer(mux)
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	c.HostURL = srv.URL
 	return c, srv
 }
@@ -284,7 +284,7 @@ func TestGetVPS_ByID(t *testing.T) {
 
 func TestGetVPS_EmptyIdentifier(t *testing.T) {
 	t.Parallel()
-	c, _ := NewClient(nil, nil)
+	c, _ := NewClient("", "")
 	_, err := c.GetVPS("")
 	if err == nil {
 		t.Fatalf("expected error for empty identifier")

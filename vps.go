@@ -350,7 +350,7 @@ type NewVPS struct {
 	Product        string `json:"product"`
 	Name           string `json:"name,omitempty"`
 	HostServer     string `json:"host_server,omitempty"`
-	HostName       string `json:"hostname,omitempty"`
+	Hostname       string `json:"hostname,omitempty"`
 	SetForwardDNS  bool   `json:"set_forward_dns,omitempty"`
 	SetReverseDNS  bool   `json:"set_reverse_dns,omitempty"`
 	DiskType       string `json:"disk_type,omitempty"`

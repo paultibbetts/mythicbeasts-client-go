@@ -1,24 +1,32 @@
-package mythicbeasts
+package vps_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/paultibbetts/mythicbeasts-client-go"
+	vpsapi "github.com/paultibbetts/mythicbeasts-client-go/vps"
 )
 
-func newTestClient(t *testing.T, mux *http.ServeMux) (*Client, *httptest.Server) {
+func newTestClient(t *testing.T, mux *http.ServeMux) (*mythicbeasts.Client, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewServer(mux)
-	c, _ := NewClient("", "")
-	c.HostURL = srv.URL
+	c, _ := mythicbeasts.NewClient("", "")
+	c.VPS().BaseURL = srv.URL
 	return c, srv
+}
+
+func testContext() context.Context {
+	return context.Background()
 }
 
 // DiskSizes
 
-func TestGetVPSDiskSizes_OK(t *testing.T) {
+func TestGetDiskSizes_OK(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/disk-sizes", func(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +38,7 @@ func TestGetVPSDiskSizes_OK(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	ds, err := c.GetVPSDiskSizes()
+	ds, err := c.VPS().GetDiskSizes(testContext())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -42,7 +50,7 @@ func TestGetVPSDiskSizes_OK(t *testing.T) {
 	}
 }
 
-func TestGetVPSDiskSizes_BadJSON(t *testing.T) {
+func TestGetDiskSizes_BadJSON(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/disk-sizes", func(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +59,7 @@ func TestGetVPSDiskSizes_BadJSON(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.GetVPSDiskSizes()
+	_, err := c.VPS().GetDiskSizes(testContext())
 	if err == nil {
 		t.Fatalf("expected unmarshall error")
 	}
@@ -59,7 +67,7 @@ func TestGetVPSDiskSizes_BadJSON(t *testing.T) {
 
 // Images
 
-func TestGetVPSImages_OK(t *testing.T) {
+func TestGetImages_OK(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/images", func(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +75,7 @@ func TestGetVPSImages_OK(t *testing.T) {
 			t.Fatalf("want GET")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]VPSImage{
+		_ = json.NewEncoder(w).Encode(map[string]vpsapi.Image{
 			"ubuntu": {Name: "ubuntu-lts", Description: "Ubuntu LTS"},
 			"debian": {Name: "debian-13", Description: "Debian 13"},
 		})
@@ -75,7 +83,7 @@ func TestGetVPSImages_OK(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	images, err := c.GetVPSImages()
+	images, err := c.VPS().GetImages(testContext())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -88,7 +96,7 @@ func TestGetVPSImages_OK(t *testing.T) {
 	}
 }
 
-func TestGetVPSImages_BadJSON(t *testing.T) {
+func TestGetImages_BadJSON(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/images", func(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +105,7 @@ func TestGetVPSImages_BadJSON(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.GetVPSDiskSizes()
+	_, err := c.VPS().GetImages(testContext())
 	if err == nil {
 		t.Fatalf("expected unmarshall error")
 	}
@@ -105,7 +113,7 @@ func TestGetVPSImages_BadJSON(t *testing.T) {
 
 // Zones
 
-func TestGetVPSZones_OK(t *testing.T) {
+func TestGetZones_OK(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/zones", func(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +121,7 @@ func TestGetVPSZones_OK(t *testing.T) {
 			t.Fatalf("want GET")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]Zone{
+		_ = json.NewEncoder(w).Encode(map[string]vpsapi.Zone{
 			"eu":  {Name: "EU", Description: "EU zone", Parents: []string{}},
 			"lon": {Name: "London", Description: "London zone", Parents: []string{"eu"}},
 		})
@@ -121,7 +129,7 @@ func TestGetVPSZones_OK(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	zones, err := c.GetVPSZones()
+	zones, err := c.VPS().GetZones(testContext())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -134,7 +142,7 @@ func TestGetVPSZones_OK(t *testing.T) {
 	}
 }
 
-func TestGetVPSZones_BadJSON(t *testing.T) {
+func TestGetZones_BadJSON(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/zones", func(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +151,7 @@ func TestGetVPSZones_BadJSON(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.GetVPSDiskSizes()
+	_, err := c.VPS().GetZones(testContext())
 	if err == nil {
 		t.Fatalf("expected unmarshall error")
 	}
@@ -151,7 +159,7 @@ func TestGetVPSZones_BadJSON(t *testing.T) {
 
 // Hosts
 
-func TestGetVPSHosts_OK(t *testing.T) {
+func TestGetHosts_OK(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/hosts", func(w http.ResponseWriter, r *http.Request) {
@@ -159,16 +167,16 @@ func TestGetVPSHosts_OK(t *testing.T) {
 			t.Fatalf("want GET")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]VPSHostInfo{
-			"one": {Name: "One", Cores: 1, RAM: 64, Disk: VPSHostDiskInfo{SSD: 1, HDD: 1}, FreeRAM: 32, FreeDisk: VPSHostDiskInfo{SSD: 1, HDD: 1}},
-			"two": {Name: "Two", Cores: 2, RAM: 64, Disk: VPSHostDiskInfo{SSD: 1, HDD: 1}, FreeRAM: 32, FreeDisk: VPSHostDiskInfo{SSD: 1, HDD: 1}},
+		_ = json.NewEncoder(w).Encode(map[string]vpsapi.Host{
+			"one": {Name: "One", Cores: 1, RAM: 64, Disk: vpsapi.HostDisk{SSD: 1, HDD: 1}, FreeRAM: 32, FreeDisk: vpsapi.HostDisk{SSD: 1, HDD: 1}},
+			"two": {Name: "Two", Cores: 2, RAM: 64, Disk: vpsapi.HostDisk{SSD: 1, HDD: 1}, FreeRAM: 32, FreeDisk: vpsapi.HostDisk{SSD: 1, HDD: 1}},
 		})
 	})
 
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	hosts, err := c.GetVPSHosts()
+	hosts, err := c.VPS().GetHosts(testContext())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -181,7 +189,7 @@ func TestGetVPSHosts_OK(t *testing.T) {
 	}
 }
 
-func TestGetVPSHosts_BadJSON(t *testing.T) {
+func TestGetHosts_BadJSON(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/hosts", func(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +198,7 @@ func TestGetVPSHosts_BadJSON(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.GetVPSDiskSizes()
+	_, err := c.VPS().GetHosts(testContext())
 	if err == nil {
 		t.Fatalf("expected unmarshall error")
 	}
@@ -198,7 +206,7 @@ func TestGetVPSHosts_BadJSON(t *testing.T) {
 
 // Pricing
 
-func TestGetVPSPricing_OK(t *testing.T) {
+func TestGetPricing_OK(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/pricing", func(w http.ResponseWriter, r *http.Request) {
@@ -206,10 +214,10 @@ func TestGetVPSPricing_OK(t *testing.T) {
 			t.Fatalf("want GET")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(VPSPricing{
-			Disk: VPSDiskPrices{
-				SSD: VPSDiskPricing{Price: 1, Extent: 1},
-				HDD: VPSDiskPricing{Price: 1, Extent: 1},
+		_ = json.NewEncoder(w).Encode(vpsapi.Pricing{
+			Disk: vpsapi.DiskPrices{
+				SSD: vpsapi.DiskPricing{Price: 1, Extent: 1},
+				HDD: vpsapi.DiskPricing{Price: 1, Extent: 1},
 			},
 			IPv4: 2,
 			Products: map[string]int64{
@@ -222,7 +230,7 @@ func TestGetVPSPricing_OK(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	pricing, err := c.GetVPSPricing()
+	pricing, err := c.VPS().GetPricing(testContext())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -240,16 +248,16 @@ func TestGetVPSPricing_OK(t *testing.T) {
 	}
 }
 
-func TestGetVPSPricing_BadJSON(t *testing.T) {
+func TestGetPricing_BadJSON(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/vps/hosts", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/vps/pricing", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"not-json}`))
 	})
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.GetVPSDiskSizes()
+	_, err := c.VPS().GetPricing(testContext())
 	if err == nil {
 		t.Fatalf("expected unmarshall error")
 	}
@@ -257,7 +265,7 @@ func TestGetVPSPricing_BadJSON(t *testing.T) {
 
 // VPS
 
-func TestGetVPS_ByID(t *testing.T) {
+func TestGet_ByID(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/servers/my-id", func(w http.ResponseWriter, r *http.Request) {
@@ -270,7 +278,7 @@ func TestGetVPS_ByID(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	v, err := c.GetVPS("my-id")
+	v, err := c.VPS().Get(testContext(), "my-id")
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -282,10 +290,10 @@ func TestGetVPS_ByID(t *testing.T) {
 	}
 }
 
-func TestGetVPS_EmptyIdentifier(t *testing.T) {
+func TestGet_EmptyIdentifier(t *testing.T) {
 	t.Parallel()
-	c, _ := NewClient("", "")
-	_, err := c.GetVPS("")
+	c, _ := mythicbeasts.NewClient("", "")
+	_, err := c.VPS().Get(testContext(), "")
 	if err == nil {
 		t.Fatalf("expected error for empty identifier")
 	}

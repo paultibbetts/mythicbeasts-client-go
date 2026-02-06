@@ -1,6 +1,7 @@
 package mythicbeasts
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,19 +9,22 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
-)
 
-// HostURL is the default base URL to use for requests.
-const HostURL string = "https://api.mythic-beasts.com/beta"
+	"github.com/paultibbetts/mythicbeasts-client-go/pi"
+	"github.com/paultibbetts/mythicbeasts-client-go/proxy"
+	"github.com/paultibbetts/mythicbeasts-client-go/vps"
+)
 
 // AuthURL is the URL of the auth service to sign in.
 const AuthURL string = "https://auth.mythic-beasts.com"
 
+// DefaultUserAgent is the default user agent to send with requests.
+const DefaultUserAgent string = "mythicbeasts-client-go"
+
 // Client uses http client to wrap communication.
 type Client struct {
-	// HostURL is the base endpoint for API calls.
-	HostURL string
 	// AuthURL is the endpoint to request tokens to sign in.
 	AuthURL string
 	// HTTPClient is the HTTP transport.
@@ -31,6 +35,16 @@ type Client struct {
 	Auth AuthStruct
 	// PollInterval controls the wait between provisioning poll attempts.
 	PollInterval time.Duration
+	// UserAgent is the User-Agent header used for requests.
+	UserAgent string
+
+	authMu          sync.RWMutex
+	tokenExpiresIn  time.Duration
+	tokenLastUsedAt time.Time
+
+	piService    *pi.Service
+	vpsService   *vps.Service
+	proxyService *proxy.Service
 }
 
 // AuthStruct contains the API key credentials used to request a token.
@@ -42,11 +56,13 @@ type AuthStruct struct {
 // AuthResponse represents the response from the authentication service.
 type AuthResponse struct {
 	AccessToken string `json:"access_token"`
+	ExpiresIn   int64  `json:"expires_in"`
 	TokenType   string `json:"token_type"`
 }
 
 // NewClient constructs a client with sensible defaults.
-// If Key ID and secret are provided it performs an auth flow.
+// Credentials are required for most API calls; if provided, they are stored
+// and a token is fetched on the first authenticated request.
 // If they are empty it will return an unauthenticated client.
 // The returned client does not follow redirects.
 func NewClient(keyid, secret string) (*Client, error) {
@@ -58,9 +74,9 @@ func NewClient(keyid, secret string) (*Client, error) {
 	}
 	c := Client{
 		HTTPClient:   hc,
-		HostURL:      HostURL,
 		AuthURL:      AuthURL,
 		PollInterval: 10 * time.Second,
+		UserAgent:    DefaultUserAgent,
 	}
 
 	if keyid == "" || secret == "" {
@@ -72,33 +88,24 @@ func NewClient(keyid, secret string) (*Client, error) {
 		Secret: secret,
 	}
 
-	authResponse, err := c.signIn()
-	if err != nil {
-		return nil, err
-	}
-
-	c.Token = authResponse.AccessToken
-
 	return &c, nil
 }
 
-// ErrIdentifierConflict indicates the requested resource identifier
-// has alreasdy been used.
-type ErrIdentifierConflict struct {
-	Identifier string
-}
-
-func (e *ErrIdentifierConflict) Error() string {
-	return fmt.Sprintf("identifier %q already in use", e.Identifier)
-}
-
-// do sends the request with the configured client,
+// Do sends the request with the configured client,
 // injecting the token if it is present.
-func (c *Client) do(req *http.Request) (*http.Response, error) {
-	token := c.Token
-
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	if req.Header.Get("Authorization") == "" {
+		token, err := c.ensureToken(req.Context())
+		if err != nil {
+			return nil, err
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+			c.markTokenUsed()
+		}
+	}
+	if c.UserAgent != "" && req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", c.UserAgent)
 	}
 
 	res, err := c.HTTPClient.Do(req)
@@ -109,23 +116,94 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	return res, nil
 }
 
-// NewRequst builds an *http.Request for the given endpoint.
+// ensureToken ensures the client has a valid token.
+//
+// The auth service returns expires_in once at sign-in, but the token
+// expiry is based on time since last use (sliding TTL).
+// The client tracks tokenLastUsedAt per request and refreshes when near expiry.
+// See [making API requests] for details.
+//
+// [making API requests]: https://www.mythic-beasts.com/support/api/auth#sec-making-api-requests
+func (c *Client) ensureToken(ctx context.Context) (string, error) {
+	c.authMu.RLock()
+	token := c.Token
+	expiresIn := c.tokenExpiresIn
+	lastUsedAt := c.tokenLastUsedAt
+	hasCreds := c.Auth.KeyID != "" && c.Auth.Secret != ""
+	c.authMu.RUnlock()
+
+	if token != "" {
+		if !hasCreds {
+			return token, nil
+		}
+		if !tokenExpired(expiresIn, lastUsedAt) {
+			return token, nil
+		}
+	}
+	if !hasCreds {
+		return "", nil
+	}
+
+	c.authMu.Lock()
+	defer c.authMu.Unlock()
+
+	if c.Token != "" {
+		if c.Auth.KeyID == "" || c.Auth.Secret == "" {
+			return c.Token, nil
+		}
+		if !tokenExpired(c.tokenExpiresIn, c.tokenLastUsedAt) {
+			return c.Token, nil
+		}
+	}
+	if c.Auth.KeyID == "" || c.Auth.Secret == "" {
+		return "", nil
+	}
+
+	authResponse, err := c.signIn(ctx)
+	if err != nil {
+		return "", err
+	}
+	c.Token = authResponse.AccessToken
+	c.tokenExpiresIn = time.Duration(authResponse.ExpiresIn) * time.Second
+	c.tokenLastUsedAt = time.Time{}
+
+	return c.Token, nil
+}
+
+func (c *Client) markTokenUsed() {
+	c.authMu.Lock()
+	defer c.authMu.Unlock()
+	c.tokenLastUsedAt = time.Now()
+}
+
+func tokenExpired(expiresIn time.Duration, lastUsedAt time.Time) bool {
+	if expiresIn <= 0 || lastUsedAt.IsZero() {
+		return false
+	}
+	expiry := expiresIn - 10*time.Second
+	if expiry < 0 {
+		expiry = 0
+	}
+	return time.Since(lastUsedAt) >= expiry
+}
+
+// NewRequest builds an *http.Request for the given endpoint.
 // If the endpoint is absolute it is used as-is; otherwise
-// it is resolved relative to the c.HostURL.
-// Returns an error if the c.HostURL is invalid.
-func (c *Client) NewRequest(method string, endpoint string, reader io.Reader) (*http.Request, error) {
+// it is resolved relative to the baseURL.
+// Returns an error if the baseURL is invalid.
+func (c *Client) NewRequest(ctx context.Context, method string, baseURL string, endpoint string, reader io.Reader) (*http.Request, error) {
 	parsedURL, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, err
 	}
 
 	if parsedURL.IsAbs() {
-		return http.NewRequest(method, parsedURL.String(), reader)
+		return http.NewRequestWithContext(ctx, method, parsedURL.String(), reader)
 	}
 
-	base, err := url.Parse(c.HostURL)
+	base, err := url.Parse(baseURL)
 	if err != nil || base.Scheme == "" || base.Host == "" {
-		return nil, fmt.Errorf("invalid host url: %q", c.HostURL)
+		return nil, fmt.Errorf("invalid base url: %q", baseURL)
 	}
 
 	if !strings.HasSuffix(base.Path, "/") {
@@ -140,33 +218,33 @@ func (c *Client) NewRequest(method string, endpoint string, reader io.Reader) (*
 
 	full := base.ResolveReference(rel)
 
-	return http.NewRequest(method, full.String(), reader)
+	return http.NewRequestWithContext(ctx, method, full.String(), reader)
 }
 
-// doRequest is a conveniance wrapper around NewRequest + do.
-func (c *Client) doRequest(method, endpoint string, reader io.Reader) (*http.Response, error) {
-	req, err := c.NewRequest(method, endpoint, reader)
+// DoRequest is a convenience wrapper around NewRequest + Do.
+func (c *Client) DoRequest(ctx context.Context, method, baseURL, endpoint string, reader io.Reader) (*http.Response, error) {
+	req, err := c.NewRequest(ctx, method, baseURL, endpoint, reader)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.do(req)
+	return c.Do(req)
 }
 
-// get issues a GET request to the endpoint, relative to the c.HostURL.
-func (c *Client) get(endpoint string) (*http.Response, error) {
-	return c.doRequest(http.MethodGet, endpoint, nil)
+// Get issues a GET request to the endpoint, relative to the baseURL.
+func (c *Client) Get(ctx context.Context, baseURL, endpoint string) (*http.Response, error) {
+	return c.DoRequest(ctx, http.MethodGet, baseURL, endpoint, nil)
 }
 
-// delete issues a DELETE request to the endpoint, relative to the c.HostURL.
+// Delete issues a DELETE request to the endpoint, relative to the baseURL.
 // It accepts a 404 as a successful deletion.
-func (c *Client) delete(endpoint string) error {
-	res, err := c.doRequest(http.MethodDelete, endpoint, nil)
+func (c *Client) Delete(ctx context.Context, baseURL, endpoint string) error {
+	res, err := c.DoRequest(ctx, http.MethodDelete, baseURL, endpoint, nil)
 	if err != nil {
 		return err
 	}
 
-	body, err := c.body(res)
+	body, err := c.Body(res)
 	if err != nil {
 		return err
 	}
@@ -188,38 +266,37 @@ func truncateBody(b []byte) string {
 	return string(b[:max]) + "..."
 }
 
-// body reads and closes the body of a response.
+// Body reads and closes the body of a response.
 // It **must** be used after a GET request to close the body.
-func (c *Client) body(res *http.Response) ([]byte, error) {
+func (c *Client) Body(res *http.Response) ([]byte, error) {
 	defer res.Body.Close()
 	return io.ReadAll(res.Body)
 }
 
-// CompletionChecker represents the function used to check if provisioning
-// is complete.
-type CompletionChecker func(data map[string]any, identifier string) (string, bool)
-
-// pollProvisioning repeatedly polls the pollURL until completion, error
+// PollProvisioning repeatedly polls the pollURL until completion, error
 // or timeout. It uses a check function to determine completion.
 // On success it returns the final resource URL.
-func (c *Client) pollProvisioning(pollUrl string, timeout time.Duration, identifier string, check CompletionChecker) (serverUrl string, error error) {
+func (c *Client) PollProvisioning(ctx context.Context, baseURL, pollURL string, timeout time.Duration, identifier string, check func(map[string]any, string) (string, bool)) (serverURL string, error error) {
 	deadline := time.Now().Add(timeout)
 
-	req, err := c.NewRequest("GET", pollUrl, nil)
+	req, err := c.NewRequest(ctx, "GET", baseURL, pollURL, nil)
 	if err != nil {
 		return "", err
 	}
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		if time.Now().After(deadline) {
 			return "", errors.New("timed out while provisioning")
 		}
 
-		res, err := c.do(req)
+		res, err := c.Do(req)
 		if err != nil {
-			return "", error
+			return "", err
 		}
-		body, err := c.body(res)
+		body, err := c.Body(res)
 		if err != nil {
 			return "", err
 		}
@@ -227,20 +304,24 @@ func (c *Client) pollProvisioning(pollUrl string, timeout time.Duration, identif
 		location := res.Header.Get("Location")
 
 		switch res.StatusCode {
-		case http.StatusSeeOther: // 303
+		case http.StatusSeeOther:
 			if location == "" {
 				return "", errors.New("polling returned no location")
 			}
 			return location, nil
-		case http.StatusInternalServerError: // 500
+		case http.StatusInternalServerError:
 			return "", fmt.Errorf("provisioning failed: %s", string(body))
-		case http.StatusAccepted: // 202
+		case http.StatusAccepted:
 			if location != "" {
 				return location, nil
 			}
-			time.Sleep(c.PollInterval)
-			continue
-		case http.StatusOK: // 200
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(c.PollInterval):
+				continue
+			}
+		case http.StatusOK:
 			if location != "" {
 				return location, nil
 			}
@@ -255,9 +336,12 @@ func (c *Client) pollProvisioning(pollUrl string, timeout time.Duration, identif
 				return url, nil
 			}
 
-			// nope
-			time.Sleep(c.PollInterval)
-			continue
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(c.PollInterval):
+				continue
+			}
 		default:
 			return "", fmt.Errorf("unexpected status while polling: %d", res.StatusCode)
 		}

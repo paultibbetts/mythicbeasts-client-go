@@ -1,10 +1,12 @@
 package mythicbeasts
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -12,9 +14,9 @@ import (
 func TestNewRequest_ResolvesRelativeAgainstHost(t *testing.T) {
 	t.Parallel()
 	c, _ := NewClient("", "")
-	c.HostURL = "https://example.com/base"
+	baseURL := "https://example.com/base"
 
-	req, err := c.NewRequest(http.MethodGet, "/vps/disk-sizes", nil)
+	req, err := c.NewRequest(context.Background(), http.MethodGet, baseURL, "/vps/disk-sizes", nil)
 	if err != nil {
 		t.Fatalf("NewRequest error: %v", err)
 	}
@@ -27,7 +29,7 @@ func TestNewRequest_KeepsAbsoluteURL(t *testing.T) {
 	t.Parallel()
 	c, _ := NewClient("", "")
 
-	req, err := c.NewRequest(http.MethodGet, "https://api.example.com/x", nil)
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "https://example.com/base", "https://api.example.com/x", nil)
 	if err != nil {
 		t.Fatalf("NewRequest error: %v", err)
 	}
@@ -40,8 +42,7 @@ func TestNewRequest_KeepsAbsoluteURL(t *testing.T) {
 func TestNewRequest_InvalidHostURL(t *testing.T) {
 	t.Parallel()
 	c, _ := NewClient("", "")
-	c.HostURL = ":// bad base"
-	_, err := c.NewRequest(http.MethodGet, "/anything", nil)
+	_, err := c.NewRequest(context.Background(), http.MethodGet, ":// bad base", "/anything", nil)
 	if err == nil {
 		t.Fatalf("expected error for invalid host url")
 	}
@@ -59,15 +60,153 @@ func TestDo_AddsBearerToken(t *testing.T) {
 
 	c, _ := NewClient("", "")
 	c.Token = "tok"
-	req, _ := c.NewRequest(http.MethodGet, s.URL, nil)
+	req, _ := c.NewRequest(context.Background(), http.MethodGet, s.URL, "/", nil)
 
-	res, err := c.do(req)
+	res, err := c.Do(req)
 	if err != nil {
 		t.Fatalf("do error: %v", err)
 	}
 
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+}
+
+func TestDo_EnsureTokenConcurrentSingleSignIn(t *testing.T) {
+	t.Parallel()
+
+	var signInCalls int32
+	loginStarted := make(chan struct{})
+	allowLogin := make(chan struct{})
+
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/login":
+			atomic.AddInt32(&signInCalls, 1)
+			select {
+			case <-loginStarted:
+			default:
+				close(loginStarted)
+			}
+			<-allowLogin
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"access_token":"XYZ","token_type":"bearer"}`))
+		case "/resource":
+			if got := r.Header.Get("Authorization"); got != "Bearer XYZ" {
+				t.Fatalf("Authorization = %q, want %q", got, "Bearer XYZ")
+			}
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(s.Close)
+
+	c, err := NewClient("keyid", "secret")
+	if err != nil {
+		t.Fatalf("NewClient error: %v", err)
+	}
+	c.AuthURL = s.URL
+	c.HTTPClient = s.Client()
+
+	const callers = 5
+	errs := make(chan error, callers)
+	for i := 0; i < callers; i++ {
+		go func() {
+			req, err := c.NewRequest(context.Background(), http.MethodGet, s.URL, "/resource", nil)
+			if err != nil {
+				errs <- err
+				return
+			}
+			_, err = c.Do(req)
+			errs <- err
+		}()
+	}
+
+	<-loginStarted
+	close(allowLogin)
+
+	for i := 0; i < callers; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("request error: %v", err)
+		}
+	}
+
+	if got := atomic.LoadInt32(&signInCalls); got != 1 {
+		t.Fatalf("signIn calls = %d, want 1", got)
+	}
+	if c.Token != "XYZ" {
+		t.Fatalf("token = %q, want %q", c.Token, "XYZ")
+	}
+}
+
+func TestEnsureToken_RefreshesWhenExpired(t *testing.T) {
+	t.Parallel()
+
+	var signInCalls int32
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/login" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		atomic.AddInt32(&signInCalls, 1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"access_token":"NEW","token_type":"bearer","expires_in":30}`))
+	}))
+	t.Cleanup(s.Close)
+
+	c, err := NewClient("keyid", "secret")
+	if err != nil {
+		t.Fatalf("NewClient error: %v", err)
+	}
+	c.AuthURL = s.URL
+	c.Token = "OLD"
+	c.tokenExpiresIn = 30 * time.Second
+	c.tokenLastUsedAt = time.Now().Add(-25 * time.Second)
+
+	token, err := c.ensureToken(context.Background())
+	if err != nil {
+		t.Fatalf("ensureToken error: %v", err)
+	}
+	if token != "NEW" {
+		t.Fatalf("token = %q, want %q", token, "NEW")
+	}
+	if got := atomic.LoadInt32(&signInCalls); got != 1 {
+		t.Fatalf("signIn calls = %d, want 1", got)
+	}
+}
+
+func TestEnsureToken_NoRefreshWhenFresh(t *testing.T) {
+	t.Parallel()
+
+	var signInCalls int32
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/login" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		atomic.AddInt32(&signInCalls, 1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"access_token":"NEW","token_type":"bearer","expires_in":30}`))
+	}))
+	t.Cleanup(s.Close)
+
+	c, err := NewClient("keyid", "secret")
+	if err != nil {
+		t.Fatalf("NewClient error: %v", err)
+	}
+	c.AuthURL = s.URL
+	c.Token = "OLD"
+	c.tokenExpiresIn = 30 * time.Second
+	c.tokenLastUsedAt = time.Now()
+
+	token, err := c.ensureToken(context.Background())
+	if err != nil {
+		t.Fatalf("ensureToken error: %v", err)
+	}
+	if token != "OLD" {
+		t.Fatalf("token = %q, want %q", token, "OLD")
+	}
+	if got := atomic.LoadInt32(&signInCalls); got != 0 {
+		t.Fatalf("signIn calls = %d, want 0", got)
 	}
 }
 
@@ -84,7 +223,7 @@ func TestGet(t *testing.T) {
 	t.Cleanup(s.Close)
 
 	c, _ := NewClient("", "")
-	res, err := c.get(s.URL)
+	res, err := c.Get(context.Background(), s.URL, "/")
 	if err != nil {
 		t.Fatalf("get error: %v", err)
 	}
@@ -105,7 +244,7 @@ func TestDelete(t *testing.T) {
 	t.Cleanup(s.Close)
 
 	c, _ := NewClient("", "")
-	if err := c.delete(s.URL); err != nil {
+	if err := c.Delete(context.Background(), s.URL, "/"); err != nil {
 		t.Fatalf("delete error: %v", err)
 	}
 }
@@ -119,11 +258,11 @@ func TestBody_ReadsAllAndCloses(t *testing.T) {
 	t.Cleanup(s.Close)
 
 	c, _ := NewClient("", "")
-	res, err := c.get(s.URL)
+	res, err := c.Get(context.Background(), s.URL, "/")
 	if err != nil {
 		t.Fatalf("get error: %v", err)
 	}
-	b, err := c.body(res)
+	b, err := c.Body(res)
 	if err != nil {
 		t.Fatalf("body error: %v", err)
 	}
@@ -165,7 +304,7 @@ func TestPoll_SeeOtherReturnsLocation(t *testing.T) {
 	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
-	url, err := c.pollProvisioning(s.URL, 2*time.Second, "id", func(map[string]any, string) (string, bool) {
+	url, err := c.PollProvisioning(context.Background(), s.URL, s.URL, 2*time.Second, "id", func(map[string]any, string) (string, bool) {
 		return "", false
 	})
 	if err != nil {
@@ -186,7 +325,7 @@ func TestPoll_InternalServerError(t *testing.T) {
 	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
-	_, err := c.pollProvisioning(s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
+	_, err := c.PollProvisioning(context.Background(), s.URL, s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
 		return "", false
 	})
 	if err == nil || err.Error() != "provisioning failed: boom" {
@@ -204,7 +343,7 @@ func TestPoll_AcceptedWithLocation(t *testing.T) {
 	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
-	url, err := c.pollProvisioning(s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
+	url, err := c.PollProvisioning(context.Background(), s.URL, s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
 		return "", false
 	})
 	if err != nil {
@@ -236,7 +375,7 @@ func TestPoll_OKWithCompletionChecker(t *testing.T) {
 		return "", false
 	}
 
-	url, err := c.pollProvisioning(s.URL, time.Second, "id", checker)
+	url, err := c.PollProvisioning(context.Background(), s.URL, s.URL, time.Second, "id", checker)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -255,7 +394,7 @@ func TestPoll_Timeout(t *testing.T) {
 	c, _ := NewClient("", "")
 	c.PollInterval = 5 * time.Millisecond
 
-	_, err := c.pollProvisioning(s.URL, 20*time.Millisecond, "id", func(map[string]any, string) (string, bool) {
+	_, err := c.PollProvisioning(context.Background(), s.URL, s.URL, 20*time.Millisecond, "id", func(map[string]any, string) (string, bool) {
 		return "", false
 	})
 	if err == nil || err.Error() != "timed out while provisioning" {
@@ -273,7 +412,7 @@ func TestPoll_OKBadJSON(t *testing.T) {
 	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
-	_, err := c.pollProvisioning(s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
+	_, err := c.PollProvisioning(context.Background(), s.URL, s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
 		return "", false
 	})
 	if err == nil {
@@ -291,7 +430,7 @@ func TestPoll_UnexpectedStatus(t *testing.T) {
 	c, _ := NewClient("", "")
 	c.PollInterval = time.Millisecond
 
-	_, err := c.pollProvisioning(s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
+	_, err := c.PollProvisioning(context.Background(), s.URL, s.URL, time.Second, "id", func(map[string]any, string) (string, bool) {
 		return "", false
 	})
 

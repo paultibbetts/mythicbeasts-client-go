@@ -1,6 +1,7 @@
 package mythicbeasts
 
 import (
+	"context"
 	"encoding/base64"
 	"io"
 	"net/http"
@@ -65,7 +66,7 @@ func TestSignIn_Success(t *testing.T) {
 	c.Auth = AuthStruct{KeyID: key, Secret: secret}
 	c.Token = ""
 
-	ar, err := c.signIn()
+	ar, err := c.signIn(context.Background())
 	if err != nil {
 		t.Fatalf("signIn error: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestSignIn_MissingCreds(t *testing.T) {
 	t.Parallel()
 	c, _ := NewClient("", "")
 	c.AuthURL = "http://example.com"
-	_, err := c.signIn()
+	_, err := c.signIn(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "define keyid and secret") {
 		t.Fatalf("expected missing creds error, got %v", err)
 	}
@@ -97,7 +98,7 @@ func TestSignIn_ServerBadJSONOrStatus(t *testing.T) {
 	c.AuthURL = srv.URL
 	c.Auth = AuthStruct{KeyID: "id", Secret: "sec"}
 
-	_, err := c.signIn()
+	_, err := c.signIn(context.Background())
 	if err == nil {
 		t.Fatalf("expected error for non-200 response")
 	}

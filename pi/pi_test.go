@@ -1,14 +1,31 @@
-package mythicbeasts
+package pi_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/paultibbetts/mythicbeasts-client-go"
+	piapi "github.com/paultibbetts/mythicbeasts-client-go/pi"
 )
 
-func TestRaspberryPis_GetModels_OK(t *testing.T) {
+func newTestClient(t *testing.T, mux *http.ServeMux) (*mythicbeasts.Client, *httptest.Server) {
+	t.Helper()
+	srv := httptest.NewServer(mux)
+	c, _ := mythicbeasts.NewClient("", "")
+	c.Pi().BaseURL = srv.URL
+	return c, srv
+}
+
+func testContext() context.Context {
+	return context.Background()
+}
+
+func TestRaspberryPis_ListModels_OK(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/models", func(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +45,7 @@ func TestRaspberryPis_GetModels_OK(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	models, err := c.GetPiModels()
+	models, err := c.Pi().ListModels(testContext())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -44,7 +61,7 @@ func TestRaspberryPis_GetModels_OK(t *testing.T) {
 	}
 }
 
-func TestRaspberryPis_GetModels_BadJSON(t *testing.T) {
+func TestRaspberryPis_ListModels_BadJSON(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/models", func(w http.ResponseWriter, r *http.Request) {
@@ -54,12 +71,12 @@ func TestRaspberryPis_GetModels_BadJSON(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	if _, err := c.GetPiModels(); err == nil {
+	if _, err := c.Pi().ListModels(testContext()); err == nil {
 		t.Fatalf("expected unmarshall error")
 	}
 }
 
-func TestRaspberryPis_GetModels_UnexpectedStatus(t *testing.T) {
+func TestRaspberryPis_ListModels_UnexpectedStatus(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/models", func(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +86,7 @@ func TestRaspberryPis_GetModels_UnexpectedStatus(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.GetPiModels()
+	_, err := c.Pi().ListModels(testContext())
 	if err == nil || !strings.Contains(err.Error(), "unexpected status: 503, down") {
 		t.Fatalf("got err=%v", err)
 	}
@@ -83,7 +100,7 @@ func TestRaspberryPis_GetOperatingSystems_OK(t *testing.T) {
 			t.Fatalf("method=%s, want GET", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(PiOperatingSystems{
+		_ = json.NewEncoder(w).Encode(piapi.OperatingSystems{
 			"raspian-buster": "Raspbian Buster",
 			"raspian-jessie": "Raspbian Jessie",
 		})
@@ -93,7 +110,7 @@ func TestRaspberryPis_GetOperatingSystems_OK(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	images, err := c.GetPiOperatingSystems(3)
+	images, err := c.Pi().GetOperatingSystems(testContext(), 3)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -119,7 +136,7 @@ func TestRaspberryPis_GetOperatingSystems_BadJSON(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	if _, err := c.GetPiOperatingSystems(3); err == nil {
+	if _, err := c.Pi().GetOperatingSystems(testContext(), 3); err == nil {
 		t.Fatalf("expected unmarshall error")
 	}
 }
@@ -134,13 +151,13 @@ func TestRaspberryPis_GetOperatingSystems_UnexpectedStatus(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.GetPiOperatingSystems(3)
+	_, err := c.Pi().GetOperatingSystems(testContext(), 3)
 	if err == nil {
 		t.Fatalf("got err=%v", err)
 	}
 }
 
-func TestRaspberryPis_GetPis(t *testing.T) {
+func TestRaspberryPis_List(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers", func(w http.ResponseWriter, r *http.Request) {
@@ -148,8 +165,8 @@ func TestRaspberryPis_GetPis(t *testing.T) {
 			t.Fatalf("method=%s, want GET", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(PiServers{
-			Servers: []Pi{
+		_ = json.NewEncoder(w).Encode(piapi.Servers{
+			Servers: []piapi.Server{
 				{IP: "12.34.56.78", SSHPort: 22, DiskSize: "1", InitializedKeys: false, Location: "eu", Model: 3, Memory: 1024, CPUSpeed: 1200, NICSpeed: 100},
 				{IP: "21.43.65.87", SSHPort: 2222, DiskSize: "2", InitializedKeys: false, Location: "lon", Model: 4, Memory: 2048, CPUSpeed: 1300, NICSpeed: 1000},
 			},
@@ -160,7 +177,7 @@ func TestRaspberryPis_GetPis(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	pis, err := c.GetPis()
+	pis, err := c.Pi().List(testContext())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -176,7 +193,7 @@ func TestRaspberryPis_GetPis(t *testing.T) {
 	}
 }
 
-func TestRaspberryPis_GetPis_BadJSON(t *testing.T) {
+func TestRaspberryPis_List_BadJSON(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers", func(w http.ResponseWriter, r *http.Request) {
@@ -186,12 +203,12 @@ func TestRaspberryPis_GetPis_BadJSON(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	if _, err := c.GetPis(); err == nil {
+	if _, err := c.Pi().List(testContext()); err == nil {
 		t.Fatalf("expected unmarshall error")
 	}
 }
 
-func TestRaspberryPis_GetPis_UnexpectedStatus(t *testing.T) {
+func TestRaspberryPis_List_UnexpectedStatus(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers", func(w http.ResponseWriter, r *http.Request) {
@@ -201,13 +218,13 @@ func TestRaspberryPis_GetPis_UnexpectedStatus(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.GetPis()
+	_, err := c.Pi().List(testContext())
 	if err == nil {
 		t.Fatalf("got err=%v", err)
 	}
 }
 
-func TestRaspberryPis_GetPi(t *testing.T) {
+func TestRaspberryPis_Get(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/1", func(w http.ResponseWriter, r *http.Request) {
@@ -215,7 +232,7 @@ func TestRaspberryPis_GetPi(t *testing.T) {
 			t.Fatalf("method=%s, want GET", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(Pi{
+		_ = json.NewEncoder(w).Encode(piapi.Server{
 			IP: "12.34.56.78", SSHPort: 22, DiskSize: "1", InitializedKeys: false, Location: "eu", Model: 3, Memory: 1024, CPUSpeed: 1200, NICSpeed: 100,
 		})
 
@@ -224,7 +241,7 @@ func TestRaspberryPis_GetPi(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	pi, err := c.GetPi("1")
+	pi, err := c.Pi().Get(testContext(), "1")
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -234,7 +251,7 @@ func TestRaspberryPis_GetPi(t *testing.T) {
 	}
 }
 
-func TestRaspberryPis_GetPi_BadJSON(t *testing.T) {
+func TestRaspberryPis_Get_BadJSON(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/1", func(w http.ResponseWriter, r *http.Request) {
@@ -244,12 +261,12 @@ func TestRaspberryPis_GetPi_BadJSON(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	if _, err := c.GetPi("1"); err == nil {
+	if _, err := c.Pi().Get(testContext(), "1"); err == nil {
 		t.Fatalf("expected unmarshall error")
 	}
 }
 
-func TestRaspberryPis_GetPi_UnexpectedStatus(t *testing.T) {
+func TestRaspberryPis_Get_UnexpectedStatus(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pi/servers/1", func(w http.ResponseWriter, r *http.Request) {
@@ -259,7 +276,7 @@ func TestRaspberryPis_GetPi_UnexpectedStatus(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.GetPi("1")
+	_, err := c.Pi().Get(testContext(), "1")
 	if err == nil {
 		t.Fatalf("got err=%v", err)
 	}
@@ -280,7 +297,7 @@ func TestRaspberryPis_Create_Success(t *testing.T) {
 			w.Header().Set("Location", pollPath)
 			w.WriteHeader(http.StatusAccepted)
 		case http.MethodGet:
-			_ = json.NewEncoder(w).Encode(Pi{
+			_ = json.NewEncoder(w).Encode(piapi.Server{
 				IP: "12.34.56.78", SSHPort: 22, DiskSize: "1", InitializedKeys: false, Location: "eu", Model: 3, Memory: 1024, CPUSpeed: 1200, NICSpeed: 100,
 			})
 		default:
@@ -296,7 +313,7 @@ func TestRaspberryPis_Create_Success(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	got, err := c.CreatePi(id, CreatePiRequest{})
+	got, err := c.Pi().Create(testContext(), id, piapi.CreateRequest{})
 	if err != nil {
 		t.Fatalf("create pi error: %v", err)
 	}
@@ -318,12 +335,12 @@ func TestRaspberryPis_Create_Conflict(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.CreatePi("existing", CreatePiRequest{})
+	_, err := c.Pi().Create(testContext(), "existing", piapi.CreateRequest{})
 	if err == nil {
 		t.Fatalf("expected ErrIdentifierConflict")
 	}
 
-	if _, ok := err.(*ErrIdentifierConflict); !ok {
+	if _, ok := err.(*piapi.ErrIdentifierConflict); !ok {
 		t.Fatalf("want ErrIdentifierConflict, got %T: %v", err, err)
 	}
 }
@@ -339,7 +356,7 @@ func TestRaspberryPis_Create_MissingLocation(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.CreatePi("x", CreatePiRequest{})
+	_, err := c.Pi().Create(testContext(), "x", piapi.CreateRequest{})
 	if err == nil || !strings.Contains(err.Error(), "missing header location") {
 		t.Fatalf("expected missing header location, got %v", err)
 	}
@@ -356,7 +373,7 @@ func TestRaspberryPis_Create_UnexpectedStatus(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.CreatePi("y", CreatePiRequest{})
+	_, err := c.Pi().Create(testContext(), "y", piapi.CreateRequest{})
 	if err == nil || !strings.Contains(err.Error(), "unexpected status 400: bad payload") {
 		t.Fatalf("expected unexpected status error, got %v", err)
 	}
@@ -368,7 +385,7 @@ func TestRaspberryPis_Delete_EmptyIdentifier(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	if err := c.DeletePi(" "); !errors.Is(err, ErrEmptyIdentifier) {
+	if err := c.Pi().Delete(testContext(), " "); !errors.Is(err, piapi.ErrEmptyIdentifier) {
 		t.Fatalf("want ErrEmptyIdentifier, got %v", err)
 	}
 }
@@ -386,7 +403,7 @@ func TestRaspberryPis_Delete_204(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	if err := c.DeletePi("test"); err != nil {
+	if err := c.Pi().Delete(testContext(), "test"); err != nil {
 		t.Fatalf("deletePi err: %v", err)
 	}
 }
@@ -401,7 +418,7 @@ func TestRaspberryPis_Delete_404(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	if err := c.DeletePi("missing"); err != nil {
+	if err := c.Pi().Delete(testContext(), "missing"); err != nil {
 		t.Fatalf("expected nil err despite 404, got %v", err)
 	}
 }
@@ -417,7 +434,7 @@ func TestRaspberryPis_Delete_UnexpectedStatus(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	err := c.DeletePi("bad")
+	err := c.Pi().Delete(testContext(), "bad")
 	if err == nil || !strings.Contains(err.Error(), "unexpected status 400: bad request") {
 		t.Fatalf("want unexpected status 400, got %v", err)
 	}
@@ -429,7 +446,7 @@ func TestRaspBerryPis_Delete_NetworkError(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	srv.Close()
 
-	if err := c.DeletePi("test"); err == nil {
+	if err := c.Pi().Delete(testContext(), "test"); err == nil {
 		t.Fatalf("expected network error, got nil")
 	}
 }

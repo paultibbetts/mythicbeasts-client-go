@@ -1,10 +1,12 @@
-package mythicbeasts
+package vps_test
 
 import (
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
+
+	vpsapi "github.com/paultibbetts/mythicbeasts-client-go/vps"
 )
 
 func TestUserData_Create(t *testing.T) {
@@ -18,7 +20,7 @@ func TestUserData_Create(t *testing.T) {
 			t.Fatalf("Content-Type=%s, want application/json", ct)
 		}
 
-		var req NewUserData
+		var req vpsapi.NewUserData
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode req: %v", err)
 		}
@@ -38,8 +40,8 @@ func TestUserData_Create(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	payload := NewUserData{Name: "test", Data: "testing"}
-	got, err := c.CreateUserData(payload)
+	payload := vpsapi.NewUserData{Name: "test", Data: "testing"}
+	got, err := c.VPS().CreateUserData(testContext(), payload)
 	if err != nil {
 		t.Fatalf("User Data Create: %v", err)
 	}
@@ -70,7 +72,7 @@ func TestUserData_Create_UnexpectedStatus(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.CreateUserData(NewUserData{})
+	_, err := c.VPS().CreateUserData(testContext(), vpsapi.NewUserData{})
 	if err == nil {
 		t.Fatalf("expected error for non-201 status")
 	}
@@ -92,7 +94,7 @@ func TestUserData_Create_BadJSON(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.CreateUserData(NewUserData{})
+	_, err := c.VPS().CreateUserData(testContext(), vpsapi.NewUserData{})
 	if err == nil {
 		t.Fatalf("user data create expected marshall error")
 	}
@@ -111,7 +113,7 @@ func TestUserData_Get(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	data, err := c.GetUserData(1)
+	data, err := c.VPS().GetUserData(testContext(), 1)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -120,7 +122,7 @@ func TestUserData_Get(t *testing.T) {
 	}
 }
 
-func TestUserData_GetIdFromName(t *testing.T) {
+func TestUserData_GetIDFromName(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/user-data", func(w http.ResponseWriter, r *http.Request) {
@@ -128,8 +130,8 @@ func TestUserData_GetIdFromName(t *testing.T) {
 			t.Fatal("want GET")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(UserDataIndex{
-			UserData: map[string]UserData{
+		_ = json.NewEncoder(w).Encode(map[string]vpsapi.UserDataSnippets{
+			"user_data": {
 				"12": {
 					ID:   12,
 					Name: "test1",
@@ -143,7 +145,7 @@ func TestUserData_GetIdFromName(t *testing.T) {
 			t.Fatalf("want GET")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(UserData{
+		_ = json.NewEncoder(w).Encode(vpsapi.UserData{
 			ID:   12,
 			Name: "test1",
 			Data: "terraform",
@@ -153,7 +155,7 @@ func TestUserData_GetIdFromName(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	data, err := c.GetUserDataByName("test1")
+	data, err := c.VPS().GetUserDataByName(testContext(), "test1")
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -162,7 +164,7 @@ func TestUserData_GetIdFromName(t *testing.T) {
 	}
 }
 
-func TestUserData_GetIdFromName_Fails(t *testing.T) {
+func TestUserData_GetIDFromName_Fails(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/user-data", func(w http.ResponseWriter, r *http.Request) {
@@ -170,8 +172,8 @@ func TestUserData_GetIdFromName_Fails(t *testing.T) {
 			t.Fatal("want GET")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(UserDataIndex{
-			UserData: map[string]UserData{
+		_ = json.NewEncoder(w).Encode(map[string]vpsapi.UserDataSnippets{
+			"user_data": {
 				"12": {
 					ID:   12,
 					Name: "test1",
@@ -183,11 +185,11 @@ func TestUserData_GetIdFromName_Fails(t *testing.T) {
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
 
-	_, err := c.GetUserDataByName("test2")
+	_, err := c.VPS().GetUserDataByName(testContext(), "test2")
 	if err == nil {
 		t.Fatalf("expected ErrUserDataNotFound")
 	}
-	if _, ok := err.(*ErrUserDataNotFound); !ok {
+	if _, ok := err.(*vpsapi.ErrUserDataNotFound); !ok {
 		t.Fatalf("want ErrUserDataNotFound, got %T: %v", err, err)
 	}
 }

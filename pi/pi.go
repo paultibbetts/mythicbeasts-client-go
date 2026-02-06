@@ -1,32 +1,48 @@
-package mythicbeasts
+package pi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/paultibbetts/mythicbeasts-client-go/internal/transport"
 )
 
-// PiModel represents the specifications of a Pi model
+// BaseURL is the default base URL for Raspberry Pi API requests.
+const BaseURL string = "https://api.mythic-beasts.com/beta"
+
+// Service provides access to the Raspberry Pi API.
+type Service struct {
+	transport.BaseService
+}
+
+// NewService constructs a Raspberry Pi API service client.
+func NewService(c transport.Requester) *Service {
+	return &Service{BaseService: transport.NewBaseService(c, BaseURL)}
+}
+
+// Model represents the specifications of a Pi model
 // that can be provisioned by Mythic Beasts.
-type PiModel struct {
+type Model struct {
 	Model    int64 `json:"model"`
 	Memory   int64 `json:"memory"`
 	NICSpeed int64 `json:"nic_speed"`
 	CPUSpeed int64 `json:"cpu_speed"`
 }
 
-// GetPiModels retrieves the list of available Pi models
-// that can be provisoned by Mythic Beasts.
-func (c *Client) GetPiModels() ([]PiModel, error) {
-	res, err := c.get("/pi/models")
+// ListModels retrieves the list of available Pi models
+// that can be provisioned by Mythic Beasts.
+func (s *Service) ListModels(ctx context.Context) ([]Model, error) {
+	res, err := s.BaseService.Get(ctx, "/pi/models")
 	if err != nil {
 		return nil, err
 	}
 
-	body, err := c.body(res)
+	body, err := s.Body(res)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +52,7 @@ func (c *Client) GetPiModels() ([]PiModel, error) {
 	}
 
 	var result struct {
-		Models []PiModel `json:"models"`
+		Models []Model `json:"models"`
 	}
 
 	if err = json.Unmarshal(body, &result); err != nil {
@@ -46,27 +62,16 @@ func (c *Client) GetPiModels() ([]PiModel, error) {
 	return result.Models, nil
 }
 
-// PiOperatingSystems maps OS identifiers to their display names.
-type PiOperatingSystems map[string]string
+// OperatingSystems maps OS identifiers to their display names.
+type OperatingSystems map[string]string
 
-// GetPiOperatingSystems retrieves the list of available operating
-// system images available for the specified Pi model.
-func (c *Client) GetPiOperatingSystems(model int64) (PiOperatingSystems, error) {
+// GetOperatingSystems retrieves the available operating
+// system images for the specified Pi model.
+func (s *Service) GetOperatingSystems(ctx context.Context, model int64) (OperatingSystems, error) {
 	url := fmt.Sprintf("/pi/images/%d", model)
 
-	res, err := c.get(url)
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := c.body(res)
-	if err != nil {
-		return nil, err
-	}
-
-	var result PiOperatingSystems
-
-	err = json.Unmarshal(body, &result)
+	var result OperatingSystems
+	_, _, err := s.GetJSON(ctx, url, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -74,8 +79,8 @@ func (c *Client) GetPiOperatingSystems(model int64) (PiOperatingSystems, error) 
 	return result, nil
 }
 
-// Pi represents a provisoned Pi server and its attributes.
-type Pi struct {
+// Server represents a provisioned Pi server and its attributes.
+type Server struct {
 	IP              string `json:"ip"`
 	SSHPort         int64  `json:"ssh_port"`
 	DiskSize        string `json:"disk_size"`
@@ -87,31 +92,17 @@ type Pi struct {
 	NICSpeed        int64  `json:"nic_speed"`
 }
 
-// PiServers represents the list of provisoned Pi servers.
-type PiServers struct {
-	Servers []Pi `json:"servers"`
+// Servers represents the list of provisioned Pi servers.
+type Servers struct {
+	Servers []Server `json:"servers"`
 }
 
-// GetPis returns the list of provisioned Pi servers.
+// List returns the list of provisioned Pi servers.
 // It does **not** return the identifiers, so it is only
 // useful for listing all servers.
-func (c *Client) GetPis() ([]Pi, error) {
-	res, err := c.get("/pi/servers")
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := c.body(res)
-	if err != nil {
-		return nil, err
-	}
-
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status %d: %s", res.StatusCode, string(body))
-	}
-
-	var result PiServers
-	err = json.Unmarshal(body, &result)
+func (s *Service) List(ctx context.Context) ([]Server, error) {
+	var result Servers
+	_, _, err := s.GetJSON(ctx, "/pi/servers", &result, http.StatusOK)
 	if err != nil {
 		return nil, err
 	}
@@ -119,36 +110,26 @@ func (c *Client) GetPis() ([]Pi, error) {
 	return result.Servers, nil
 }
 
-// GetPi retrieves details for a single Pi server by its identifier.
+// Get retrieves details for a single Pi server by its identifier.
 // Returns ErrEmptyIdentifier if the identifier is blank.
-func (c *Client) GetPi(identifier string) (Pi, error) {
+func (s *Service) Get(ctx context.Context, identifier string) (Server, error) {
 	if strings.TrimSpace(identifier) == "" {
-		return Pi{}, ErrEmptyIdentifier
+		return Server{}, ErrEmptyIdentifier
 	}
 	url := fmt.Sprintf("/pi/servers/%s", identifier)
 
-	res, err := c.get(url)
+	var result Server
+	_, _, err := s.GetJSON(ctx, url, &result)
 	if err != nil {
-		return Pi{}, err
-	}
-
-	body, err := c.body(res)
-	if err != nil {
-		return Pi{}, err
-	}
-
-	var result Pi
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return Pi{}, err
+		return Server{}, err
 	}
 
 	return result, nil
 }
 
-// CreatePiRequest represents the parameters for provisioning
+// CreateRequest represents the parameters for provisioning
 // a new Pi server.
-type CreatePiRequest struct {
+type CreateRequest struct {
 	Model      int64  `json:"model,omitempty"`
 	Memory     int64  `json:"memory,omitempty"`
 	CPUSpeed   int64  `json:"cpu_speed,omitempty"`
@@ -158,30 +139,29 @@ type CreatePiRequest struct {
 	WaitForDNS bool   `json:"wait_for_dns,omitempty"`
 }
 
-// CreatePi provisions a new Pi server with the given identifier and
+// Create provisions a new Pi server with the given identifier and
 // request parameters. It blocks until the server becomes live or the timeout
 // is reached. Returns ErrIdentifierConflict if the identifier is already in use.
-func (c *Client) CreatePi(identifier string, server CreatePiRequest) (*Pi, error) {
-	requestUrl := fmt.Sprintf("/pi/servers/%s", identifier)
+func (s *Service) Create(ctx context.Context, identifier string, server CreateRequest) (*Server, error) {
+	requestURL := fmt.Sprintf("/pi/servers/%s", identifier)
 
-	requestJson, err := json.Marshal(server)
+	requestJSON, err := json.Marshal(server)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := c.NewRequest(http.MethodPost, requestUrl, bytes.NewBuffer(requestJson))
+	req, err := s.NewRequest(ctx, http.MethodPost, requestURL, bytes.NewBuffer(requestJSON))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Add("Content-Type", "application/json")
 
-	res, err := c.do(req)
+	res, err := s.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
 
-	body, err := c.body(res)
+	body, err := s.Body(res)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected status %d", res.StatusCode)
 	}
@@ -194,29 +174,29 @@ func (c *Client) CreatePi(identifier string, server CreatePiRequest) (*Pi, error
 		return nil, fmt.Errorf("unexpected status %d: %s", res.StatusCode, string(body))
 	}
 
-	pollUrl := res.Header.Get("Location")
-	if pollUrl == "" {
+	pollURL := res.Header.Get("Location")
+	if pollURL == "" {
 		return nil, fmt.Errorf("missing header location for polling")
 	}
 
 	isPiReady := func(data map[string]any, identifier string) (string, bool) {
 		if status, ok := data["status"].(string); ok && status == "live" {
-			return fmt.Sprintf("pi/servers/%s", identifier), true
+			return fmt.Sprintf("/pi/servers/%s", identifier), true
 		}
 		return "", false
 	}
 
-	serverUrl, err := c.pollProvisioning(pollUrl, 5*time.Minute, identifier, isPiReady)
+	serverURL, err := s.PollProvisioning(ctx, pollURL, 5*time.Minute, identifier, isPiReady)
 	if err != nil {
 		return nil, err
 	}
 
-	serverRes, err := c.get(serverUrl)
+	serverRes, err := s.BaseService.Get(ctx, serverURL)
 	if err != nil {
 		return nil, err
 	}
 
-	serverBody, err := c.body(serverRes)
+	serverBody, err := s.Body(serverRes)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected status %s", string(serverBody))
 	}
@@ -225,7 +205,7 @@ func (c *Client) CreatePi(identifier string, server CreatePiRequest) (*Pi, error
 		return nil, fmt.Errorf("failed to fetch server info: %s", string(serverBody))
 	}
 
-	var created Pi
+	var created Server
 	err = json.Unmarshal(serverBody, &created)
 	if err != nil {
 		return nil, err
@@ -234,15 +214,15 @@ func (c *Client) CreatePi(identifier string, server CreatePiRequest) (*Pi, error
 	return &created, nil
 }
 
-// DeletePi removes the Pi server with the given identifier.
+// Delete removes the Pi server with the given identifier.
 // Returns ErrEmptyIdentifier if the identifier is blank.
 // Considers a 404 as a successful deletion.
-func (c *Client) DeletePi(identifier string) error {
+func (s *Service) Delete(ctx context.Context, identifier string) error {
 	if strings.TrimSpace(identifier) == "" {
 		return ErrEmptyIdentifier
 	}
 
 	url := fmt.Sprintf("/pi/servers/%s", identifier)
 
-	return c.delete(url)
+	return s.BaseService.Delete(ctx, url)
 }

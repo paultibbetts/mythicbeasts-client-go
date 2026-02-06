@@ -28,12 +28,12 @@ func TestUserData_Create(t *testing.T) {
 			t.Fatalf("missing fields: %+v", req)
 		}
 
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":      123,
-			"name":    req.Name,
-			"content": req.Data,
-			"size":    int64(len(req.Data)),
+			"id":   123,
+			"name": req.Name,
+			"data": req.Data,
+			"size": int64(len(req.Data)),
 		})
 	})
 
@@ -74,7 +74,7 @@ func TestUserData_Create_UnexpectedStatus(t *testing.T) {
 
 	_, err := c.VPS().CreateUserData(testContext(), vpsapi.NewUserData{})
 	if err == nil {
-		t.Fatalf("expected error for non-201 status")
+		t.Fatalf("expected error for non-200 status")
 	}
 
 	want := "unexpected status 400: bad payload"
@@ -87,7 +87,7 @@ func TestUserData_Create_BadJSON(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vps/user-data", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("{not-json}"))
 	})
 
@@ -108,7 +108,7 @@ func TestUserData_Get(t *testing.T) {
 			t.Fatalf("want GET")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":1,"name":"test","content":"123abc", "size":123}`))
+		_, _ = w.Write([]byte(`{"id":1,"name":"test","data":"123abc", "size":123}`))
 	})
 	c, srv := newTestClient(t, mux)
 	defer srv.Close()
@@ -191,5 +191,58 @@ func TestUserData_GetIDFromName_Fails(t *testing.T) {
 	}
 	if _, ok := err.(*vpsapi.ErrUserDataNotFound); !ok {
 		t.Fatalf("want ErrUserDataNotFound, got %T: %v", err, err)
+	}
+}
+
+func TestUserData_Update(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vps/user-data/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Fatalf("method=%s, want PUT", r.Method)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Fatalf("Content-Type=%s, want application/json", ct)
+		}
+
+		var req vpsapi.UpdateUserData
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode req: %v", err)
+		}
+		if req.Data == "" {
+			t.Fatalf("missing data: %+v", req)
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	err := c.VPS().UpdateUserData(testContext(), 1, vpsapi.UpdateUserData{Data: "terraform"})
+	if err != nil {
+		t.Fatalf("User Data Update: %v", err)
+	}
+}
+
+func TestUserData_Update_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vps/user-data/1", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("bad payload"))
+	})
+
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	err := c.VPS().UpdateUserData(testContext(), 1, vpsapi.UpdateUserData{})
+	if err == nil {
+		t.Fatalf("expected error for non-200 status")
+	}
+
+	want := "unexpected status 400: bad payload"
+	if err.Error() != want {
+		t.Fatalf("err=%q want %q", err.Error(), want)
 	}
 }

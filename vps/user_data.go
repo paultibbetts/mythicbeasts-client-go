@@ -13,23 +13,29 @@ type NewUserData struct {
 	Data string `json:"data"`
 }
 
+// UpdateUserData represents the data required to update
+// an existing User Data snippet.
+type UpdateUserData struct {
+	Data string `json:"data"`
+}
+
 // UserData represents a User Data snippet.
 type UserData struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
-	Data string `json:"content"`
+	Data string `json:"data"`
 	Size int64  `json:"size"`
 }
 
 // UserDataSnippets maps snippet IDs to user data snippets.
 type UserDataSnippets map[string]UserData
 
-// CreateUserData creates a new User Data snippet with the given ID.
+// CreateUserData creates a new User Data snippet.
 func (s *Service) CreateUserData(ctx context.Context, data NewUserData) (UserData, error) {
 	path := "/vps/user-data"
 
 	var created UserData
-	if _, _, err := s.DoJSON(ctx, http.MethodPost, path, data, &created, http.StatusCreated); err != nil {
+	if _, _, err := s.DoJSON(ctx, http.MethodPost, path, data, &created, http.StatusOK); err != nil {
 		return UserData{}, err
 	}
 
@@ -41,7 +47,7 @@ func (s *Service) GetUserData(ctx context.Context, id int64) (UserData, error) {
 	requestURL := fmt.Sprintf("/vps/user-data/%d", id)
 
 	var result UserData
-	if _, _, err := s.GetJSON(ctx, requestURL, &result); err != nil {
+	if _, _, err := s.GetJSON(ctx, requestURL, &result, http.StatusOK); err != nil {
 		return UserData{}, err
 	}
 
@@ -52,7 +58,7 @@ func (s *Service) GetUserDataSnippets(ctx context.Context) (UserDataSnippets, er
 	var resp struct {
 		UserData UserDataSnippets `json:"user_data"`
 	}
-	if _, _, err := s.GetJSON(ctx, "/vps/user-data", &resp); err != nil {
+	if _, _, err := s.GetJSON(ctx, "/vps/user-data", &resp, http.StatusOK); err != nil {
 		return nil, err
 	}
 
@@ -77,6 +83,13 @@ func (s *Service) GetUserDataByName(ctx context.Context, name string) (UserData,
 	}
 
 	return s.GetUserData(ctx, id)
+}
+
+// UpdateUserData updates the User Data snippet with the given ID.
+func (s *Service) UpdateUserData(ctx context.Context, id int64, data UpdateUserData) error {
+	url := fmt.Sprintf("/vps/user-data/%d", id)
+	_, _, err := s.DoJSON(ctx, http.MethodPut, url, data, nil, http.StatusOK)
+	return err
 }
 
 // DeleteUserData removes the User Data snippet with the given ID.

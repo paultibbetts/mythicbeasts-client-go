@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 type Server struct {
 	Identifier string      `json:"identifier"`
 	Name       string      `json:"name"`
+	Status     string      `json:"status"`
 	HostServer string      `json:"host_server"`
 	Zone       ServerZone  `json:"zone"`
 	Product    string      `json:"product"`
@@ -60,8 +62,7 @@ type SSHProxy struct {
 	Port     int64  `json:"port"`
 }
 
-// VNC represents the details of VNC that should
-// be used when provisioning a new VPS.
+// VNC represents VNC connection details for a provisioned VPS.
 type VNC struct {
 	Mode     string `json:"mode"`
 	Password string `json:"password"`
@@ -80,7 +81,7 @@ func (s *Service) Get(ctx context.Context, identifier string) (Server, error) {
 	url := fmt.Sprintf("/vps/servers/%s", identifier)
 
 	var result Server
-	if _, _, err := s.GetJSON(ctx, url, &result); err != nil {
+	if _, _, err := s.GetJSON(ctx, url, &result, http.StatusOK); err != nil {
 		return Server{}, err
 	}
 
@@ -100,25 +101,26 @@ type CreateRequest struct {
 	DiskSize       int64  `json:"disk_size"`
 	ExtraCores     int64  `json:"extra_cores,omitempty"`
 	ExtraRAM       int64  `json:"extra_ram,omitempty"`
-	IPv4           bool   `json:"ipv4"`
+	IPv4           bool   `json:"ipv4,omitempty"`
 	Zone           string `json:"zone,omitempty"`
-	Image          string `json:"image"`
+	Image          string `json:"image,omitempty"`
 	UserData       string `json:"user_data,omitempty"` // id or name
 	UserDataString string `json:"user_data_string,omitempty"`
-	SSHKeys        string `json:"ssh_keys"`
-	VNC            NewVNC `json:"vnc"`
+	SSHKeys        string `json:"ssh_keys,omitempty"`
 	CPUMode        string `json:"cpu_mode,omitempty"`
 	NetDevice      string `json:"net_device,omitempty"`
 	DiskBus        string `json:"disk_bus,omitempty"`
-	Tablet         bool   `json:"tablet"`
+	Tablet         *bool  `json:"tablet,omitempty"`
 }
 
-// NewVNC represents the data required to set VNC details when
-// provisioning a new VPS.
-type NewVNC struct {
-	Mode     string `json:"mode,omitempty"`
-	Password string `json:"password,omitempty"`
-}
+// SetTablet includes the tablet field in create requests.
+func (r *CreateRequest) SetTablet(v bool) { r.Tablet = &v }
+
+// UnsetTablet omits the tablet field from create requests.
+func (r *CreateRequest) UnsetTablet() { r.Tablet = nil }
+
+// Bool returns a pointer to v.
+func Bool(v bool) *bool { return &v }
 
 // Create provisions a new VPS with the given identifier and
 // request parameters.
@@ -164,7 +166,9 @@ func (s *Service) Create(ctx context.Context, identifier string, server CreateRe
 	}
 
 	isVPSReady := func(data map[string]any, identifier string) (string, bool) {
-		if status, ok := data["status"].(string); ok && status == "running" {
+		status, _ := data["status"].(string)
+		log.Printf("vps[%s] provisioning status=%q", identifier, status)
+		if status == "running" {
 			return fmt.Sprintf("/vps/servers/%s", identifier), true
 		}
 		return "", false
@@ -196,6 +200,185 @@ func (s *Service) Create(ctx context.Context, identifier string, server CreateRe
 	}
 
 	return created, nil
+}
+
+// UpdateSpecs represents updatable VPS specification fields.
+type UpdateSpecs struct {
+	DiskSize   *int64 `json:"disk_size,omitempty"`
+	ExtraCores *int64 `json:"extra_cores,omitempty"`
+	ExtraRAM   *int64 `json:"extra_ram,omitempty"`
+}
+
+// NewUpdateSpecs constructs an empty specs update payload.
+func NewUpdateSpecs() UpdateSpecs {
+	return UpdateSpecs{}
+}
+
+// SetDiskSize sets disk size in MB.
+func (s *UpdateSpecs) SetDiskSize(v int64) { s.DiskSize = &v }
+
+// SetExtraCores sets additional CPU cores.
+func (s *UpdateSpecs) SetExtraCores(v int64) { s.ExtraCores = &v }
+
+// SetExtraRAM sets additional RAM in MB.
+func (s *UpdateSpecs) SetExtraRAM(v int64) { s.ExtraRAM = &v }
+
+// UpdateRequest represents the fields that can be updated for a VPS.
+type UpdateRequest struct {
+	Product    *string      `json:"product,omitempty"`
+	Specs      *UpdateSpecs `json:"specs,omitempty"`
+	Name       *string      `json:"name,omitempty"`
+	BootDevice *string      `json:"boot_device,omitempty"`
+	ISOImage   *string      `json:"iso_image,omitempty"`
+	CPUMode    *string      `json:"cpu_mode,omitempty"`
+	NetDevice  *string      `json:"net_device,omitempty"`
+	DiskBus    *string      `json:"disk_bus,omitempty"`
+	Tablet     *bool        `json:"tablet,omitempty"`
+
+	// nullable fields with tri-state semantics for PATCH:
+	// unset (omit), set value, set null.
+	clearName     bool
+	clearISOImage bool
+}
+
+// UpdateResponse represents the response from a VPS update request.
+type UpdateResponse struct {
+	Message string `json:"message"`
+}
+
+// NewUpdateRequest constructs an empty VPS update request.
+func NewUpdateRequest() UpdateRequest {
+	return UpdateRequest{}
+}
+
+// SetProduct sets the VPS product code.
+func (r *UpdateRequest) SetProduct(v string) { r.Product = &v }
+
+// SetSpecs sets the VPS specs payload.
+func (r *UpdateRequest) SetSpecs(v UpdateSpecs) { r.Specs = &v }
+
+// SetBootDevice sets the boot device.
+func (r *UpdateRequest) SetBootDevice(v string) { r.BootDevice = &v }
+
+// SetCPUMode sets the CPU mode.
+func (r *UpdateRequest) SetCPUMode(v string) { r.CPUMode = &v }
+
+// SetNetDevice sets the network device type.
+func (r *UpdateRequest) SetNetDevice(v string) { r.NetDevice = &v }
+
+// SetDiskBus sets the disk bus type.
+func (r *UpdateRequest) SetDiskBus(v string) { r.DiskBus = &v }
+
+// SetTablet sets tablet mode.
+func (r *UpdateRequest) SetTablet(v bool) { r.Tablet = &v }
+
+// SetName sets the VPS name (non-null).
+func (r *UpdateRequest) SetName(v string) {
+	r.Name = &v
+	r.clearName = false
+}
+
+// ClearName sets the VPS name to null.
+func (r *UpdateRequest) ClearName() {
+	r.Name = nil
+	r.clearName = true
+}
+
+// UnsetName omits the name field from the PATCH body.
+func (r *UpdateRequest) UnsetName() {
+	r.Name = nil
+	r.clearName = false
+}
+
+// SetISOImage sets the ISO image (non-null).
+func (r *UpdateRequest) SetISOImage(v string) {
+	r.ISOImage = &v
+	r.clearISOImage = false
+}
+
+// ClearISOImage sets the ISO image to null.
+func (r *UpdateRequest) ClearISOImage() {
+	r.ISOImage = nil
+	r.clearISOImage = true
+}
+
+// UnsetISOImage omits the iso_image field from the PATCH body.
+func (r *UpdateRequest) UnsetISOImage() {
+	r.ISOImage = nil
+	r.clearISOImage = false
+}
+
+// MarshalJSON encodes tri-state nullable fields used by PATCH updates.
+func (r UpdateRequest) MarshalJSON() ([]byte, error) {
+	body := map[string]any{}
+
+	if r.Product != nil {
+		body["product"] = *r.Product
+	}
+	if r.Specs != nil {
+		body["specs"] = r.Specs
+	}
+	if r.BootDevice != nil {
+		body["boot_device"] = *r.BootDevice
+	}
+	if r.CPUMode != nil {
+		body["cpu_mode"] = *r.CPUMode
+	}
+	if r.NetDevice != nil {
+		body["net_device"] = *r.NetDevice
+	}
+	if r.DiskBus != nil {
+		body["disk_bus"] = *r.DiskBus
+	}
+	if r.Tablet != nil {
+		body["tablet"] = *r.Tablet
+	}
+
+	switch {
+	case r.clearName:
+		body["name"] = nil
+	case r.Name != nil:
+		body["name"] = *r.Name
+	}
+
+	switch {
+	case r.clearISOImage:
+		body["iso_image"] = nil
+	case r.ISOImage != nil:
+		body["iso_image"] = *r.ISOImage
+	}
+
+	return json.Marshal(body)
+}
+
+// RequiresPoweredOff reports whether this update includes fields that
+// the API requires the VPS to be powered off before changing.
+func (r UpdateRequest) RequiresPoweredOff() bool {
+	return r.BootDevice != nil ||
+		r.ISOImage != nil ||
+		r.clearISOImage ||
+		r.CPUMode != nil ||
+		r.NetDevice != nil ||
+		r.DiskBus != nil ||
+		r.Tablet != nil
+}
+
+// Update updates the settings for a provisioned VPS.
+//
+// Returns ErrEmptyIdentifier if the identifier is blank.
+func (s *Service) Update(ctx context.Context, identifier string, req UpdateRequest) (UpdateResponse, error) {
+	if strings.TrimSpace(identifier) == "" {
+		return UpdateResponse{}, ErrEmptyIdentifier
+	}
+
+	url := fmt.Sprintf("/vps/servers/%s", identifier)
+
+	var result UpdateResponse
+	if _, _, err := s.DoJSON(ctx, http.MethodPatch, url, req, &result, http.StatusOK); err != nil {
+		return UpdateResponse{}, err
+	}
+
+	return result, nil
 }
 
 // Delete removes a provisioned VPS.

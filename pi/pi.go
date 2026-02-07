@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -212,6 +213,36 @@ func (s *Service) Create(ctx context.Context, identifier string, server CreateRe
 	}
 
 	return &created, nil
+}
+
+type UpdateSSHKeyRequest struct {
+	SSHKey string `json:"ssh_key"`
+}
+
+type UpdateSSHKeyResponse struct {
+	SSHKey string `json:"ssh_key"`
+}
+
+// UpdateSSHKey will replace the contents of
+// /root/.ssh/authorized_keys with the provided key.
+// It returns the contents of that file.
+func (s *Service) UpdateSSHKey(ctx context.Context, identifier string, req UpdateSSHKeyRequest) (UpdateSSHKeyResponse, error) {
+	if strings.TrimSpace(identifier) == "" {
+		return UpdateSSHKeyResponse{}, ErrEmptyIdentifier
+	}
+
+	if strings.TrimSpace(req.SSHKey) == "" {
+		return UpdateSSHKeyResponse{}, errors.New("ssh key is required")
+	}
+
+	url := fmt.Sprintf("/pi/servers/%s/ssh-key", identifier)
+
+	var result UpdateSSHKeyResponse
+	if _, _, err := s.DoJSON(ctx, http.MethodPut, url, req, &result, http.StatusOK); err != nil {
+		return UpdateSSHKeyResponse{}, err
+	}
+
+	return result, nil
 }
 
 // Delete removes the Pi server with the given identifier.

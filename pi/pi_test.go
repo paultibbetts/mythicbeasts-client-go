@@ -379,6 +379,86 @@ func TestRaspberryPis_Create_UnexpectedStatus(t *testing.T) {
 	}
 }
 
+func TestRaspberryPis_UpdateSSHKey_Success(t *testing.T) {
+	t.Parallel()
+	const id = "1"
+	const key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC user@example.com"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/pi/servers/"+id+"/ssh-key", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Fatalf("method=%s, want PUT", r.Method)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Fatalf("Content-Type=%q, want application/json", ct)
+		}
+
+		var req piapi.UpdateSSHKeyRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode req: %v", err)
+		}
+		if req.SSHKey != key {
+			t.Fatalf("ssh_key=%q, want %q", req.SSHKey, key)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(piapi.UpdateSSHKeyResponse{SSHKey: key})
+	})
+
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	got, err := c.Pi().UpdateSSHKey(testContext(), id, piapi.UpdateSSHKeyRequest{SSHKey: key})
+	if err != nil {
+		t.Fatalf("update ssh key: %v", err)
+	}
+
+	if got.SSHKey != key {
+		t.Fatalf("ssh_key=%q, want %q", got.SSHKey, key)
+	}
+}
+
+func TestRaspberryPis_UpdateSSHKey_EmptyIdentifier(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := c.Pi().UpdateSSHKey(testContext(), " ", piapi.UpdateSSHKeyRequest{SSHKey: "ssh-rsa AAAAB..."})
+	if !errors.Is(err, piapi.ErrEmptyIdentifier) {
+		t.Fatalf("want ErrEmptyIdentifier, got %v", err)
+	}
+}
+
+func TestRaspberryPis_UpdateSSHKey_EmptyKey(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := c.Pi().UpdateSSHKey(testContext(), "1", piapi.UpdateSSHKeyRequest{})
+	if err == nil || !strings.Contains(err.Error(), "ssh key is required") {
+		t.Fatalf("want ssh key required error, got %v", err)
+	}
+}
+
+func TestRaspberryPis_UpdateSSHKey_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/pi/servers/1/ssh-key", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":"Server is not fully provisioned"}`))
+	})
+
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := c.Pi().UpdateSSHKey(testContext(), "1", piapi.UpdateSSHKeyRequest{SSHKey: "ssh-rsa AAAAB..."})
+	if err == nil || !strings.Contains(err.Error(), `unexpected status 409: {"error":"Server is not fully provisioned"}`) {
+		t.Fatalf("want unexpected status 409 error, got %v", err)
+	}
+}
+
 func TestRaspberryPis_Delete_EmptyIdentifier(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()

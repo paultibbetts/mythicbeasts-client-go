@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -174,6 +175,99 @@ func TestUserData_Get(t *testing.T) {
 	}
 }
 
+func TestUserData_Get_StringIDAndSize(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vps/user-data/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("want GET")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"1","name":"test","data":"123abc","size":"123"}`))
+	})
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	data, err := c.VPS().GetUserData(testContext(), 1)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if data.ID != 1 || data.Name != "test" || !strings.Contains(data.Data, "123abc") || data.Size != 123 {
+		t.Fatalf("user data = %+v", data)
+	}
+}
+
+func TestUserData_Get_ContentAlias(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vps/user-data/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("want GET")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":1,"name":"test","content":"123abc","size":123}`))
+	})
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	data, err := c.VPS().GetUserData(testContext(), 1)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if data.ID != 1 || data.Name != "test" || !strings.Contains(data.Data, "123abc") || data.Size != 123 {
+		t.Fatalf("user data = %+v", data)
+	}
+}
+
+func TestUserData_Get_DataPreferredOverContent(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vps/user-data/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("want GET")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":1,"name":"test","data":"primary","content":"secondary","size":7}`))
+	})
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	data, err := c.VPS().GetUserData(testContext(), 1)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if data.Data != "primary" {
+		t.Fatalf("data=%q, want primary", data.Data)
+	}
+}
+
+func TestUserData_Get_MissingData(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vps/user-data/1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("want GET")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"1","name":"test","size":"123"}`))
+	})
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	_, err := c.VPS().GetUserData(testContext(), 1)
+	if err == nil {
+		t.Fatalf("expected malformed response error")
+	}
+
+	var malformed *vpsapi.ErrMalformedResponse
+	if !errors.As(err, &malformed) {
+		t.Fatalf("want ErrMalformedResponse, got %T: %v", err, err)
+	}
+	if malformed.Field != "data" {
+		t.Fatalf("field=%q, want data", malformed.Field)
+	}
+}
+
 func TestUserData_GetIDFromName(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
@@ -243,6 +337,40 @@ func TestUserData_GetIDFromName_Fails(t *testing.T) {
 	}
 	if _, ok := err.(*vpsapi.ErrUserDataNotFound); !ok {
 		t.Fatalf("want ErrUserDataNotFound, got %T: %v", err, err)
+	}
+}
+
+func TestUserData_GetIDFromName_StringID(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vps/user-data", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatal("want GET")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"user_data":{"12":{"id":"12","name":"test1","size":"129"}}}`))
+	})
+	mux.HandleFunc("/vps/user-data/12", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("want GET")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(vpsapi.UserData{
+			ID:   12,
+			Name: "test1",
+			Data: "terraform",
+			Size: 129,
+		})
+	})
+	c, srv := newTestClient(t, mux)
+	defer srv.Close()
+
+	data, err := c.VPS().GetUserDataByName(testContext(), "test1")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if data.ID != 12 {
+		t.Fatalf("user data id wrong, got %+v", data)
 	}
 }
 

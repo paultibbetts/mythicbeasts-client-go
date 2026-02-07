@@ -40,3 +40,28 @@ type ErrInvalidProductPeriod struct {
 func (e *ErrInvalidProductPeriod) Error() string {
 	return fmt.Sprintf("invalid product period: %q", e.Period)
 }
+
+// ErrMalformedResponse indicates the API response body did not contain the
+// expected structure or field types.
+type ErrMalformedResponse struct {
+	Resource string
+	Field    string
+	Reason   string
+}
+
+func (e *ErrMalformedResponse) Error() string {
+	resource := e.Resource
+	if resource == "" {
+		resource = "response"
+	}
+	if e.Field == "" && e.Reason == "" {
+		return fmt.Sprintf("malformed %s", resource)
+	}
+	if e.Reason == "" {
+		return fmt.Sprintf("malformed %s field %q", resource, e.Field)
+	}
+	if e.Field == "" {
+		return fmt.Sprintf("malformed %s: %s", resource, e.Reason)
+	}
+	return fmt.Sprintf("malformed %s field %q: %s", resource, e.Field, e.Reason)
+}

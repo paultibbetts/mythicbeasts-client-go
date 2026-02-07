@@ -35,7 +35,7 @@ func (s *Service) CreateUserData(ctx context.Context, data NewUserData) (UserDat
 	path := "/vps/user-data"
 
 	var created UserData
-	if _, _, err := s.DoJSON(ctx, http.MethodPost, path, data, &created, http.StatusOK); err != nil {
+	if _, _, err := s.DoJSON(ctx, http.MethodPost, path, data, &created, http.StatusOK, http.StatusCreated); err != nil {
 		return UserData{}, err
 	}
 
